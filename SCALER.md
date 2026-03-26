@@ -2,31 +2,44 @@
 
 Network routing and TPS layer.
 
-## Working PoC - Real ZK Verified
+## Honest Status (March 26, 2026)
 
-### Real Benchmark Results (March 26, 2026)
-- Device: Mac mini (Apple Silicon M4)
-- ZK: Real Groth16 (snarkjs) - NOT simulated
-- Verification: 100% (15/15 proofs verified)
+### What Actually Works
 
-| Batch Size | TPS | Verified |
-|------------|-----|----------|
-| 100,000 | 1,063,830 | Yes |
-| 250,000 | 1,041,667 | Yes |
-| 500,000 | 1,046,025 | Yes |
-| 750,000 | 1,038,302 | Yes |
-| 1,000,000 | 1,025,992 | Yes |
+**Merkle Tree Batching (Real)**
+- Building SHA256 Merkle tree: ~90ms for 100K transactions
+- TPS: ~1M (just hashing, no ZK)
 
-### Best: 1,063,830 TPS @ 100K batch size
+**ZK Verification (Real)**
+- snarkjs.groth16.verify() on pre-generated proof: ~514ms
+- Can verify 1.9 proofs/sec
 
-### What's Real
-- execution/batch-optimizer.js - Batching
-- execution/pipeline.js - Optimized
-- keys/ - Real Groth16 circuit and proving key
-- integration/benchmark.js - Real ZK benchmark
+### What Doesn't Work Yet
 
-### Next Steps
-- Deploy verifier to Sepolia for on-chain verification
+**ZK Proving**
+- Cannot generate new proofs - circuit requires correct Merkle path
+- Would need to: build tree → extract path → prove → verify
+- This is the hard part
+
+### Verified (Real)
+- keys/circuit compiles
+- keys/proof.json verifies successfully  
+- keys/verification_key.json is valid
+
+### What's Missing for Full ZK
+1. Build actual Merkle tree with all txs
+2. Extract proof path for each batch
+3. Generate circuit inputs
+4. Run snarkjs.fullProve()
+5. Deploy verifier to Sepolia
+
+### Honest Numbers
+| Component | Real | Notes |
+|-----------|------|-------|
+| Merkle tree | 90ms/100K | SHA256 only |
+| ZK Prove | FAILS | Need Merkle path inputs |
+| ZK Verify | 514ms | Pre-generated proof |
+| TPS | ~1M | Merkle building only |
 
 ## NOT a Blockchain
 Brixa Scaler is NOT a blockchain. It is chain-agnostic.
