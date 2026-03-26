@@ -10,9 +10,8 @@ Network routing and TPS layer.
 
 - Routes tasks to nodes
 - Batches transactions for throughput
-- Connects to Calicos blockchain for settlement
+- Connects to any blockchain for settlement (chain-agnostic)
 
 ## NOT a Blockchain
 
-Brixa Scaler and Node Engine are NOT blockchains.
-They connect to the Calicos blockchain for final settlement.
+Brixa Scaler is NOT a blockchain. It is chain-agnostic.
