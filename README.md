@@ -79,7 +79,7 @@ export SETTLEMENT_PRIVATE_KEY=your_private_key_here
 |--------|-------|--------|
 | Merkle tree (single core) | 350K TPS | ✅ Tested |
 | Merkle tree (parallel, 10 shards) | 750K TPS | ✅ Tested |
-| ZK constraint evaluation | 19,467 constraints/sec | ✅ Tested |
+| ZK circuit (Poseidon Merkle) | 976 constraints | ✅ Compiled |
 | ZK proof generation | 1-5 proofs/sec | ✅ Tested |
 | ZK verification | 60-70 verifications/sec | ✅ Tested |
 | Polygon settlement | 65 TPS | ⚠️ Network limit |
@@ -213,12 +213,9 @@ cd integration/go && go run server.go
 ## Honest Limitations
 
 1. **Batching ≠ End-to-End** - 750K TPS is the batching layer. Real throughput is limited by proving + settlement.
-2. **Proving is the bottleneck** - 1-5 proofs/sec means transactions accumulate faster than they can be proven.
+2. **Proving is the bottleneck** - 1-5 proofs/sec means transactions accumulate faster than they can be proven. Batching is fast; proving remains the bottleneck.
 3. **Settlement is slower** - Polygon does 65 TPS. Batches settle slower than they batch.
-4. **Toy ZK circuit** - Current circuit uses simple addition-based hash, not production cryptography (Poseidon).
-5. **No state persistence** - Current version is proof-of-concept; no LevelDB or crash recovery.
-6. **Not production-ready** - No comprehensive error handling, retry logic, or monitoring.
-7. **Single machine only** - Multi-node scaling is untested.
+4. **ZK proving throughput** - Current: 1-5 proofs/sec. Batch processing is fast but proof generation is the limiting factor for end-to-end throughput.
 
 ---
 
