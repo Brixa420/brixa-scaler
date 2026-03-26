@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
-	"math"
 	"math/rand"
+	"sync"
 	"time"
 )
 
@@ -252,4 +252,3 @@ func (cb *CircuitBreaker) IsHealthy() bool {
 	return cb.state == "closed"
 }
 
-import "sync" // Add this to the imports in the actual file

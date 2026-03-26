@@ -218,7 +218,7 @@ func init() {
 }
 
 func handleBatch(w http.ResponseWriter, r *http.Request) {
-	start := time.Now()
+	// start := time.Now()
 	correlationID := fmt.Sprintf("%d", time.Now().UnixNano())
 	
 	var req BatchRequest
