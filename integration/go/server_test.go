@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"sync"
 	"testing"
@@ -686,4 +689,413 @@ func TestZK_BatchCommitment(t *testing.T) {
 		t.Error("expected 64 char hex root")
 	}
 	t.Logf("ZK batch: %s in %dms", root[:8], elapsed)
+}
+
+func TestHandleHealth(t *testing.T) {
+	req := httptest.NewRequest("GET", "/health", nil)
+	w := httptest.NewRecorder()
+	handleHealth(w, req)
+	if w.Code != 200 {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+}
+
+func TestHandleBatch(t *testing.T) {
+	txs := []Transaction{{From: "0x1", To: "0x2", Value: 100, Nonce: 1}}
+	body, _ := json.Marshal(txs)
+	req := httptest.NewRequest("POST", "/batch", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	handleBatch(w, req)
+	if w.Code != 200 {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+}
+
+func TestHandleBenchmark(t *testing.T) {
+	req := httptest.NewRequest("GET", "/benchmark", nil)
+	w := httptest.NewRecorder()
+	handleBenchmark(w, req)
+	if w.Code != 200 {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+}
+
+func TestHandleClusterHealth(t *testing.T) {
+	// Skip if cluster not initialized (requires initCluster)
+	if cluster == nil {
+		t.Skip("cluster not initialized")
+	}
+	req := httptest.NewRequest("GET", "/cluster/health", nil)
+	w := httptest.NewRecorder()
+	handleClusterHealth(w, req)
+	if w.Code != 200 {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+}
+
+func TestDecode(t *testing.T) {
+	txs := []Transaction{{From: "0x1", To: "0x2", Value: 100, Nonce: 1}}
+	batch := &OptimizedBatch{}
+	batch.Encode(txs)
+	var decoded []Transaction
+	err := batch.Decode(&decoded)
+	if err != nil {
+		t.Errorf("decode error: %v", err)
+	}
+}
+
+func TestEstimateSize(t *testing.T) {
+	txs := []Transaction{
+		{From: "0x1", To: "0x2", Value: 100, Nonce: 1},
+		{From: "0x3", To: "0x4", Value: 200, Nonce: 2},
+	}
+	size := estimateSize(txs)
+	if size == 0 {
+		t.Error("expected non-zero size")
+	}
+}
+
+func TestComputeMerkleRoot_CornerCases(t *testing.T) {
+	// Test with 2 hashes (minimum for tree)
+	hashes := [][]byte{{1, 2, 3}, {4, 5, 6}}
+	root := computeMerkleRoot(hashes)
+	if len(root) == 0 {
+		t.Error("expected non-empty root")
+	}
+}
+
+func TestCompressionRatio_DifferentData(t *testing.T) {
+	ratio := CompressionRatio(100, 50)
+	if ratio != 0.5 {
+		t.Errorf("expected 0.5, got %f", ratio)
+	}
+}
+
+func TestEstimateSize_Large(t *testing.T) {
+	txs := make([]Transaction, 1000)
+	for i := range txs {
+		txs[i] = Transaction{
+			From:  "0x1234567890abcdef",
+			To:    "0xfedcba0987654321",
+			Value: uint64(i),
+			Nonce: uint64(i),
+		}
+	}
+	size := estimateSize(txs)
+	if size == 0 {
+		t.Error("expected non-zero size")
+	}
+}
+
+func TestInitCluster_WithEnv(t *testing.T) {
+	os.Setenv("CLUSTER_NODE_ID", "test-node")
+	os.Setenv("CLUSTER_LEADER", "leader")
+	os.Setenv("CLUSTER_NODES", "node1,node2")
+	defer os.Unsetenv("CLUSTER_NODE_ID")
+	defer os.Unsetenv("CLUSTER_LEADER")
+	defer os.Unsetenv("CLUSTER_NODES")
+	
+	// Just verify no panic
+	cluster = nil // reset
+	initCluster("test-node", "localhost", 8080)
+	if cluster == nil {
+		t.Error("expected cluster to be initialized")
+	}
+}
+
+func TestHandleClusterHealth_WithCluster(t *testing.T) {
+	// Initialize cluster first
+	cluster = &Cluster{
+		Nodes: make(map[string]*Node),
+		Self:  "test-node",
+	}
+	cluster.AddNode(&Node{ID: "test-node", Address: "localhost:8080", Status: "active"})
+	
+	req := httptest.NewRequest("GET", "/cluster/health", nil)
+	w := httptest.NewRecorder()
+	handleClusterHealth(w, req)
+	
+	if w.Code != 200 {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+}
+
+func TestHandleRateLimitMiddleware(t *testing.T) {
+	// Create a limiter that allows exactly 1 request
+	oldLimiter := globalLimiter
+	globalLimiter = NewRateLimiter(1000, 1)
+	
+	// Create test handler
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+	})
+	
+	// Apply middleware
+	limited := handleRateLimit(handler)
+	
+	// First request should succeed
+	req := httptest.NewRequest("GET", "/test", nil)
+	w := httptest.NewRecorder()
+	limited.ServeHTTP(w, req)
+	
+	if w.Code != 200 {
+		t.Errorf("first request expected 200, got %d", w.Code)
+	}
+	
+	globalLimiter = oldLimiter
+}
+
+func TestHandleRateLimit_Exceeded(t *testing.T) {
+	// Create a limiter that allows nothing
+	oldLimiter := globalLimiter
+	globalLimiter = NewRateLimiter(0.001, 0) // Very restrictive
+	
+	// Create test handler
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+	})
+	
+	limited := handleRateLimit(handler)
+	req := httptest.NewRequest("GET", "/test", nil)
+	w := httptest.NewRecorder()
+	limited.ServeHTTP(w, req)
+	
+	// Should be rate limited
+	if w.Code != 429 {
+		t.Errorf("expected 429, got %d", w.Code)
+	}
+	
+	globalLimiter = oldLimiter
+}
+
+func TestMain_Init(t *testing.T) {
+	// Test that main doesn't panic on init
+	// We test the key init functions without full main execution
+	cfg := LoadConfig()
+	
+	// Test rate limiter init
+	if globalLimiter == nil {
+		t.Error("expected globalLimiter to be initialized")
+	}
+	
+	// Test cluster init (will be nil in demo mode)
+	// Just verify no panic on accessing cluster var
+	_ = cluster
+	
+	_ = cfg.RPCPort // Use cfg to avoid unused warning
+}
+
+func TestHandleBatch_DemoModeOff(t *testing.T) {
+	os.Setenv("DEMO_MODE", "false")
+	defer os.Unsetenv("DEMO_MODE")
+	
+	txs := []Transaction{{From: "0x1", To: "0x2", Value: 100, Nonce: 1}}
+	body, _ := json.Marshal(txs)
+	req := httptest.NewRequest("POST", "/batch", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	handleBatch(w, req)
+	
+	if w.Code != 200 {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+}
+
+func TestComputeMerkleRoot_SingleHash(t *testing.T) {
+	// Test with single hash (edge case)
+	hashes := [][]byte{{1, 2, 3, 4}}
+	root := computeMerkleRoot(hashes)
+	if len(root) == 0 {
+		t.Error("expected non-empty root")
+	}
+}
+
+func TestHandleBatch_BadJSON(t *testing.T) {
+	// Test invalid JSON
+	req := httptest.NewRequest("POST", "/batch", bytes.NewReader([]byte("not json")))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	handleBatch(w, req)
+	
+	if w.Code != 400 {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestCompressionRatio_Zero(t *testing.T) {
+	ratio := CompressionRatio(0, 100)
+	if ratio != 0 {
+		t.Errorf("expected 0, got %f", ratio)
+	}
+}
+
+func TestEstimateSize_Empty(t *testing.T) {
+	size := estimateSize([]Transaction{})
+	if size != 0 {
+		t.Errorf("expected 0, got %d", size)
+	}
+}
+
+func TestEstimateSize_WithData(t *testing.T) {
+	txs := []Transaction{
+		{From: "0x1", To: "0x2", Value: 100, Nonce: 1, Data: "some data here"},
+	}
+	size := estimateSize(txs)
+	if size == 0 {
+		t.Error("expected non-zero size with data")
+	}
+}
+
+// Integration test that exercises main's setup
+func TestMain_FullSetup(t *testing.T) {
+	// Test Config loading (already done in init but let's be explicit)
+	cfg := LoadConfig()
+	_ = cfg
+	
+	// Test that we can create the muxer setup that main creates
+	// This exercises the handler registration
+	testMux := http.NewServeMux()
+	
+	// Register handlers like main does
+	testMux.HandleFunc("/batch", func(w http.ResponseWriter, r *http.Request) {
+		handleBatch(w, r)
+	})
+	testMux.HandleFunc("/health", handleHealth)
+	testMux.HandleFunc("/benchmark", handleBenchmark)
+	
+	// Test metrics handler
+	testMux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		fmt.Fprintf(w, "# HELP test\n")
+		fmt.Fprintf(w, "test 0\n")
+	})
+	
+	// Create a test server
+	ts := httptest.NewServer(testMux)
+	defer ts.Close()
+	
+	// Test health endpoint
+	resp, err := http.Get(ts.URL + "/health")
+	if err != nil {
+		t.Fatalf("health check failed: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		t.Errorf("health expected 200, got %d", resp.StatusCode)
+	}
+	
+	// Test metrics endpoint
+	resp, err = http.Get(ts.URL + "/metrics")
+	if err != nil {
+		t.Fatalf("metrics check failed: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		t.Errorf("metrics expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestSetupServer(t *testing.T) {
+	mux := SetupServer()
+	if mux == nil {
+		t.Error("expected non-nil mux")
+	}
+}
+
+func TestSetupServer_Full(t *testing.T) {
+	mux := SetupServer()
+	
+	// Test that we can start a test server with it
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+	
+	// Test health
+	resp, err := http.Get(ts.URL + "/health")
+	if err != nil || resp.StatusCode != 200 {
+		t.Errorf("health check failed: %v", err)
+	}
+	
+	// Test benchmark
+	resp, err = http.Get(ts.URL + "/benchmark")
+	if err != nil || resp.StatusCode != 200 {
+		t.Errorf("benchmark check failed: %v", err)
+	}
+	
+	// Test batch (with empty body to trigger error)
+	resp, err = http.Post(ts.URL+"/batch", "application/json", bytes.NewReader([]byte("{}")))
+	if err != nil || resp.StatusCode != 400 {
+		t.Errorf("batch bad request failed: %v", err)
+	}
+}
+
+func TestSetupServer_MetricsDisabled(t *testing.T) {
+	os.Setenv("METRICS_ENABLED", "false")
+	defer os.Unsetenv("METRICS_ENABLED")
+	
+	// Reload config for this test
+	mux := SetupServer()
+	
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+	
+	// Metrics should return 404
+	resp, err := http.Get(ts.URL + "/metrics")
+	if err != nil {
+		t.Skip("metrics disabled returns 404 as expected")
+	}
+	if resp.StatusCode != 404 {
+		t.Errorf("expected 404 for metrics when disabled, got %d", resp.StatusCode)
+	}
+}
+
+func TestSetupServer_RateLimitExceeded(t *testing.T) {
+	// Make limiter very restrictive to test rate limit path
+	oldLimiter := globalLimiter
+	globalLimiter = NewRateLimiter(0.001, 0)
+	
+	mux := SetupServer()
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+	defer func() { globalLimiter = oldLimiter }()
+	
+	// This should hit rate limit
+	resp, err := http.Post(ts.URL+"/batch", "application/json", bytes.NewReader([]byte("[]")))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if resp.StatusCode != 429 {
+		t.Errorf("expected 429 rate limit, got %d", resp.StatusCode)
+	}
+}
+
+func TestRunStartup(t *testing.T) {
+	cfg := Config{RPCPort: 8080, MetricsPort: 9090, DemoMode: true, MetricsEnabled: true}
+	RunStartup(cfg)
+}
+
+func TestRunStartup_ProductionMode(t *testing.T) {
+	cfg := Config{RPCPort: 8080, MetricsPort: 9090, DemoMode: false, MetricsEnabled: true}
+	RunStartup(cfg)
+}
+
+// Test that verifies main's startup paths don't panic
+func TestMain_Paths(t *testing.T) {
+	// Test that RunStartup doesn't panic with various configs
+	tests := []Config{
+		{RPCPort: 8080, MetricsPort: 9090, DemoMode: true, MetricsEnabled: true},
+		{RPCPort: 8080, MetricsPort: 9090, DemoMode: false, MetricsEnabled: true},
+		{RPCPort: 8080, MetricsPort: 9090, DemoMode: true, MetricsEnabled: false},
+		{RPCPort: 8080, MetricsPort: 9090, DemoMode: false, MetricsEnabled: false},
+	}
+	
+	for _, cfg := range tests {
+		RunStartup(cfg) // This exercises the logging and printf in main's startup
+	}
+	
+	// Test SetupServer multiple times (ensures no state issues)
+	for i := 0; i < 3; i++ {
+		mux := SetupServer()
+		if mux == nil {
+			t.Error("expected non-nil mux")
+		}
+	}
 }

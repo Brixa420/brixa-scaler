@@ -338,15 +338,45 @@ func handleRateLimit(next http.Handler) http.Handler {
 	})
 }
 
-func main() {
-	cfg := LoadConfig()
-	rpcPort := cfg.RPCPort
-	metricsPort := cfg.MetricsPort
+// SetupServer creates the HTTP muxer (extracted for testability)
+func SetupServer() *http.ServeMux {
+	mux := http.NewServeMux()
+	
+	mux.HandleFunc("/batch", func(w http.ResponseWriter, r *http.Request) {
+		if !globalLimiter.Allow() {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusTooManyRequests)
+			fmt.Fprintf(w, `{"error":"rate limit exceeded","retry_after":1}`)
+			return
+		}
+		handleBatch(w, r)
+	})
+	mux.HandleFunc("/health", handleHealth)
+	mux.HandleFunc("/benchmark", handleBenchmark)
 
+	// Metrics endpoint
+	cfg := LoadConfig()
+	if cfg.MetricsEnabled {
+		mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/plain")
+			fmt.Fprintf(w, "# HELP brixa_scaler_total_txs Total transactions processed\n")
+			fmt.Fprintf(w, "# TYPE brixa_scaler_total_txs counter\n")
+			fmt.Fprintf(w, "brixa_scaler_total_txs %d\n", stats.totalTxs)
+			fmt.Fprintf(w, "# HELP brixa_scaler_total_batches Total batches created\n")
+			fmt.Fprintf(w, "# TYPE brixa_scaler_total_batches counter\n")
+			fmt.Fprintf(w, "brixa_scaler_total_batches %d\n", stats.totalBatches)
+		})
+	}
+	
+	return mux
+}
+
+// RunStartup runs startup sequence (extracted for testability)
+func RunStartup(cfg Config) {
 	logger.Info("brixa-scaler starting", map[string]interface{}{
 		"version":        "1.0.0",
-		"rpc_port":       rpcPort,
-		"metrics_port":   metricsPort,
+		"rpc_port":       cfg.RPCPort,
+		"metrics_port":   cfg.MetricsPort,
 		"demo_mode":      cfg.DemoMode,
 	})
 
@@ -355,6 +385,14 @@ func main() {
 		fmt.Printf("   No real transactions will be processed.\n")
 		fmt.Printf("   Set DEMO_MODE=false to enable real transactions\n\n")
 	}
+}
+
+func main() {
+	cfg := LoadConfig()
+	RunStartup(cfg)
+	
+	rpcPort := cfg.RPCPort
+	metricsPort := cfg.MetricsPort
 
 	// Graceful shutdown
 	shutdownChan := make(chan os.Signal, 1)
@@ -391,34 +429,11 @@ func main() {
 	fmt.Printf("  GET  /benchmark - Quick TPS benchmark\n")
 	fmt.Printf("  GET  /metrics  - Prometheus metrics\n")
 
-	// HTTP handlers with rate limiting
-	http.HandleFunc("/batch", func(w http.ResponseWriter, r *http.Request) {
-		if !globalLimiter.Allow() {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusTooManyRequests)
-			fmt.Fprintf(w, `{"error":"rate limit exceeded","retry_after":1}`)
-			return
-		}
-		handleBatch(w, r)
-	})
-	http.HandleFunc("/health", handleHealth)
-	http.HandleFunc("/benchmark", handleBenchmark)
-
-	// Metrics endpoint
-	if cfg.MetricsEnabled {
-		http.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "text/plain")
-			fmt.Fprintf(w, "# HELP brixa_scaler_total_txs Total transactions processed\n")
-			fmt.Fprintf(w, "# TYPE brixa_scaler_total_txs counter\n")
-			fmt.Fprintf(w, "brixa_scaler_total_txs %d\n", stats.totalTxs)
-			fmt.Fprintf(w, "# HELP brixa_scaler_total_batches Total batches created\n")
-			fmt.Fprintf(w, "# TYPE brixa_scaler_total_batches counter\n")
-			fmt.Fprintf(w, "brixa_scaler_total_batches %d\n", stats.totalBatches)
-		})
-	}
+	// Use extracted server setup
+	mux := SetupServer()
 
 	fmt.Printf("\n🚀 BrixaScaler running on http://localhost:%d\n", rpcPort)
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", rpcPort), nil))
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", rpcPort), mux))
 }
 // ═══════════════════════════════════════════════════════════════
 // MULTI-NODE COORDINATION - Cluster Management (Priority 5)
