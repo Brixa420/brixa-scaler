@@ -2,43 +2,35 @@
 
 Network routing and TPS layer.
 
-## Production ZK Circuit Results (March 26, 2026)
+## TPS Improvement via Parallelism (March 26, 2026)
 
-### Real Scaling Measurements (groth16.Prove verified)
+### Results
+| Method | Constraints | TPS |
+|--------|-------------|-----|
+| Single proof (1000 levels) | 5001 | 54 |
+| Single proof (100 levels) | 501 | 270 |
+| Parallel 100 (100 levels) | 501 | 434 |
+| Parallel 1000 (51 constraints) | 51 | 1,558 |
+| Parallel 2000 (51 constraints) | 51 | 1,616 |
 
-| Constraints | Levels | Prove Time | TPS |
-|-------------|--------|------------|-----|
-| 51 | 10 | ~1ms | ~256K* |
-| 101 | 20 | 2.57ms | 389 |
-| 251 | 50 | 2.96ms | 338 |
-| 301 | 60 | 3.37ms | 297 |
-| 501 | 100 | 3.70ms | 270 |
-| 1001 | 200 | 4.73ms | 211 |
-| 2501 | 500 | 11.10ms | 90 |
-| 5001 | 1000 | 18.52ms | 54 |
+### Analysis
+- Parallelism scales: ~1600 TPS with 2000 parallel goroutines
+- Single proof at 1000 levels: 54 TPS (real Merkle tree)
+- Gap: Need 10x faster for production use
 
-*Micro-benchmark - different circuit type
-
-### Production Circuit
-- **1000 levels** (real Merkle tree 2^1000): **54 TPS**
-- Constraint count: **5001**
-- Function: real groth16.Prove verified
-- Verification: passes
-
-### Key Finding
-Scaling is sub-quadratic (not linear):
-- 100x more constraints (51→5001) = 19x slower prove time
-- TPS drops from 256K to 54
+### Honest Assessment
+- Current: 54-1,616 TPS depending on circuit size
+- Target for AI/gaming: ~10K+ TPS needed
+- gnark is CPU-only (no Metal/GPU acceleration in v0.14.0)
 
 ### Next Steps
-1. ✓ Production circuit works (1000 levels)
-2. GPU acceleration via Metal (Apple Silicon)
-3. Batching multiple txs per proof
+1. Use smaller circuits (51 constraints) + parallelism
+2. Batch multiple leaves into single proof (wip)
+3. GPU: gnark CUDA or custom implementation
 
 ### Code
-- keys/zk_1000.go - 1000 level Merkle circuit (54 TPS)
-- keys/zk_500.go - 500 level circuit
-- keys/zk_50.go - 50 level circuit
+- keys/zk_max_parallel.go - Parallelism benchmark
+- keys/zk_1000.go - Single proof 54 TPS
 
 ## NOT a Blockchain
 Brixa Scaler is NOT a blockchain. It is chain-agnostic.
