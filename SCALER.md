@@ -2,25 +2,27 @@
 
 Network routing and TPS layer.
 
-## Full Architecture (March 26, 2026)
+## Current Status: PoC / Design Document
 
-### Layer 1: Horizontal Proving Layer
-- `execution/horizontal-prover.js` - 100+ GPU nodes
-- 50 proofs/sec per prover × 100 provers = 5,000 proofs/sec
-- 100K txs/proof = **500M TPS** proving bandwidth
+This is a proof-of-concept architecture, not production infrastructure.
 
-### Layer 2: Recursive Proof Compression
-- `execution/recursive-compressor.js` - Halo2/Nova style
-- 1,000 child proofs → 1 parent proof
-- 500M → **500K settlement units/sec**
+### Working (Validated)
+- execution/batch-optimizer.js - Batching (10K+ txs)
+- execution/pipeline.js - Pipeline concept
+- execution/interfaces.js - API definitions
 
-### Layer 3: Sharded Settlement
-- `execution/sharded-settlement.js` - 10 parallel chains
-- 50K TPS per shard × 10 shards = **500K TPS finality**
-- Unified state via recursive bridges
+### Aspirational (Not Running)
+- execution/horizontal-prover.js - Stub code
+- execution/recursive-compressor.js - Stub code
+- execution/sharded-settlement.js - Stub code
 
-### Critical Interfaces
-- `execution/interfaces.js` - BatcherInput, ProofBundle, SettlementConfig
+### Realistic Throughput
+- Current: ~5K TPS (local simulation)
+
+### Requirements for Production
+1. Live GPU proving network (100+ nodes)
+2. On-chain recursive proof verification
+3. Running multi-chain settlement
 
 ## NOT a Blockchain
 
