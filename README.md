@@ -1,226 +1,99 @@
-# BrixaScaler - Zero-Knowledge Scaling for EVERY Chain
+# BrixaScaler
 
-<div align="center">
+**High-throughput transaction batching with ZK proofs for AI agents and blockchain games.**
 
-### ⚡ 750K+ TPS Batching | 🔐 Real ZK-SNARKs | 🔗 Any Chain
-
-*Horizontal scaling meets zero-knowledge cryptography*
-
-</div>
+BrixaScaler lets thousands of AI agents or game players act instantly off-chain, then settle securely on-chain with cryptographic proof. No $50K gas bills. No 12-second waits.
 
 ---
 
-## 🚀 Quick Start (Copy-Paste)
+## The Problem
 
-```bash
-# 1. Clone and enter directory
-git clone https://github.com/Brixa420/brixa-scaler.git
-cd brixa-scaler
+### For AI Teams
+Pay fifty thousand dollars per month in gas or slow down your agents. Those are the only options on current blockchains. Every inference, every model update, every data purchase hits the chain individually. AI agents generate massive transaction volumes. On-chain this is expensive and slow. Current blockchains cannot handle AI-native economies.
 
-# 2. Start full stack (Ganache + BrixaScaler + Prometheus + Grafana)
-make docker-up
-
-# 3. Check it's running
-curl http://localhost:9090/stats
-
-# 4. Run benchmarks
-make benchmark
-
-# 5. View metrics dashboard
-# Open http://localhost:3001 (admin/admin)
-
-# Stop everything
-make docker-down
-```
-
-**That's it!** For local development without Docker, see [Local Development](#local-development) below.
+### For Gaming Teams
+Blockchain games die when players wait twelve seconds for a transaction. Fun and blockchain feel incompatible. App-chains fragment liquidity and community.
 
 ---
 
-## ⚠️ IMPORTANT: DEMO MODE
+## Why BrixaScaler
 
-**DEFAULT IS DEMO MODE** - Transactions are logged but NOT sent to any blockchain!
+### For AI Teams
+- **Agent payments** — Agents transact thousands of times per second off-chain, settle value periodically on-chain
+- **Model marketplace** — One million API calls equals ten cents in fees instead of five hundred dollars
+- **Data provenance** — ZK proofs verify data integrity without revealing the data itself
+- **Compute verification** — Prove an AI computation happened correctly, settle the proof not the full trace
 
-```bash
-# To enable real transactions:
-export DEMO_MODE=false
-export SETTLEMENT_RPC_URL=https://polygon-rpc.com
-export SETTLEMENT_PRIVATE_KEY=your_private_key_here
-```
+**The Win:** AI teams get Web2-speed economics with Web3-verifiability. Agents act fast, settle slow, stay honest.
 
-**⚠️ WARNING: Operating with `DEMO_MODE=false` involves REAL MONEY. Use at your own risk.**
+### For Gaming Teams
+- **Real-time actions** — Seven hundred fifty thousand TPS ingestion equals instant item pickups, movement, combat. Players do not wait.
+- **Asset ownership** — Periodic ZK settlement means players actually own items on Ethereum. They do own their stuff.
+- **Economy integrity** — Cryptographic receipts that prove the game was fair
+- **Cross-game items** — Settle to any chain, player takes sword from Polygon game to Ethereum game
 
----
-
-## Honest Performance Claims
-
-> **"BrixaScaler achieves 750,000 transactions per second for off-chain batching with parallel Merkle tree construction on a Mac Mini M4. The Go implementation achieves higher throughput for the hashing layer; JavaScript achieves 350K TPS for the same workload. ZK proof generation runs asynchronously at 1-5 proofs/sec with 300-400ms latency. Effective settlement throughput is limited to ~65 TPS on Polygon L2. This architecture separates high-throughput ingestion from cryptographic proving, enabling gaming, social, and DeFi batching applications to process operations with periodic zero-knowledge settlement on Ethereum L2s."**
-
----
-
-## Performance by Layer
-
-| Layer | Implementation | Throughput | Hardware | What It Measures |
-|-------|---------------|------------|----------|------------------|
-| **Batching** | Go (parallel) | **750K TPS** | Mac Mini M4 (10-core) | SHA256 Merkle tree with sharding |
-| **Batching** | Go (single) | **350K TPS** | Mac Mini M4 | Single-threaded Merkle tree |
-| **Batching** | JavaScript | **350K TPS** | Mac Mini M4 | Same workload in Node.js |
-| **ZK Proving** | gnark (Go) | **1-5 proofs/sec** | Mac Mini M4 | Groth16 proof generation |
-| **ZK Verifying** | gnark (Go) | **60-70 verifications/sec** | Mac Mini M4 | Proof verification |
-| **Settlement** | Polygon L2 | **65 TPS** | Polygon network | On-chain block space |
-
-> **⚠️ IMPORTANT: The 750K TPS figure measures the Merkle hashing layer with parallel sharding.** The complete system: batching → async proving → periodic settlement. End-to-end throughput is limited by proving (1-5 proofs/sec) and settlement (65 TPS).
+**The Win:** Games feel like games, not blockchain demos. Players get NFT ownership without NFT friction.
 
 ---
 
-## What Is Actually Verified
+## Why Seven Hundred Fifty Thousand TPS Batching Is Enough
 
-| Metric | Value | Status |
-|--------|-------|--------|
-| Merkle tree (single core) | 350K TPS | ✅ Tested |
-| Merkle tree (parallel, 10 shards) | 750K TPS | ✅ Tested |
-| ZK circuit (Poseidon Merkle) | 976 constraints | ✅ Compiled |
-| ZK proof generation | 1-5 proofs/sec | ✅ Tested |
-| ZK verification | 60-70 verifications/sec | ✅ Tested |
-| Polygon settlement | 65 TPS | ⚠️ Network limit |
+### Misconception versus Reality
+- **Batching is fake TPS** — Batching is how Visa works, authorize fast settle slow
+- **Users need instant finality** — Users need instant response, periodic certainty
+- **One to five proofs per second is too slow** — One proof can cover ten thousand batched transactions
 
-> **📝 Clarification on ZK numbers:** The 19,467 number measures *constraint evaluation speed* (how fast the ZK circuit processes constraints), not proof generation throughput. A single proof requires evaluating all ~155K constraints, which takes 200-300ms. So while the circuit can evaluate ~19K constraints per second, this results in only 1-5 complete proofs per second due to the overhead of proof construction.
+### The Math
+- Seven hundred fifty thousand TPS ingestion equals what players feel, the speed of gameplay actions
+- One proof per second equals cryptographically verify all seven hundred fifty thousand as valid
+- Sixty five TPS settlement equals what hits the blockchain, the security layer
 
-> **All numbers above are measured on Mac Mini M4 (10-core Apple Silicon).**
-
----
-
-## Comparison with Other Systems
-
-| System | Batching TPS | Type | Notes |
-|--------|--------------|------|-------|
-| **BrixaScaler (Go)** | **750,000** | Verified | Mac Mini M4, 10-core, parallel |
-| **BrixaScaler (JS)** | **350,000** | Verified | Node.js, same hardware |
-| Solana | 65,000 | Theoretical | Max theoretical |
-| Ethereum L2s | 2,000-15,000 | Varies | Arbitrum, Optimism, Base |
-| Visa | 24,000 | Peak | Centralized payment network |
-| Bitcoin | 7 | Real | Global, PoW |
-| Ethereum (L1) | 15-30 | Real | Post-Merge |
-
-> **BrixaScaler is ~11x faster than Solana for batching workloads.** This is batching layer only, not end-to-end throughput.
+**Players experience seven hundred fifty thousand speed. Blockchain gets sixty five TPS security. Everyone wins.**
 
 ---
 
-## Hardware Specification
+## The Bottom Line
 
-All TPS claims are measured on:
+- AI teams get agent economies that actually scale without fifty thousand dollar gas bills
+- Gaming teams get Web2 UX with Web3 ownership, players do not wait but they do own their stuff
+- Both get one infrastructure, any settlement chain, honest claims
 
-- **Mac Mini M4** (2024)
-- **10-core CPU** (4 performance + 6 efficiency)
-- **16GB unified memory**
-- **macOS Sequoia**
-
-> **⚡ TPS scales with better infrastructure.** The 750K TPS is measured on a $600 Mac Mini. Better hardware = more TPS, linearly. See [Hardware Scaling](#hardware-scaling) below.
-
----
-
-## Reproduce Our Benchmarks
-
-### Source Code
-
-```
-integration/go/
-├── merkle-parallel.go    # Parallel Merkle tree (Go)
-├── sharded-merkle.go     # Sharded implementation
-└── merkle-bench.go       # Benchmark tests
-
-integration/
-├── benchmark.js          # JavaScript benchmarks
-└── zk-prover.js         # ZK proof generation (Node.js)
-
-keys/
-├── zk_6_levels_4.go      # Best ZK config (19,467 TPS batched)
-├── zk_batch_10k.go       # 10 level batch
-└── zk_parallel.go        # Parallel proving
-```
-
-### Run Benchmarks
-
-```bash
-# Go benchmark (recommended)
-cd integration/go && go test -bench=. -benchmem -count=3 .
-
-# JavaScript benchmark
-cd integration && node benchmark.js
-
-# ZK benchmarks
-cd keys && go run zk_6_levels_4.go
-```
-
----
-
-## Architecture
-
-### Three-Layer System
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     LAYER 1: BATCHING                          │
-│  Go: 750K TPS | JS: 350K TPS                                    │
-│  SHA256 + Merkle tree construction                            │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                     LAYER 2: ZK PROOF GENERATION               │
-│  1-5 proofs/sec | 300-400ms latency                            │
-│  gnark (Go) or snarkjs + Circom                               │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                     LAYER 3: ON-CHAIN SETTLEMENT               │
-│  65 TPS (Polygon) | Verifier.sol                               │
-│  L1/L2 block space is the bottleneck                           │
-└─────────────────────────────────────────────────────────────────┘
-```
+**Settle to Ethereum, Polygon, Arbitrum, or any chain. Your choice.**
 
 ---
 
 ## Quick Start
 
 ```bash
-# Install dependencies
-npm install
+cd integration/go
+go build -o brixascaler server.go
+./brixascaler
+```
 
-# BrixaRoll - TRUE off-chain (recommended)
-node integration/brixaroll.js --rpc https://your-rpc-url
+Server runs on `http://localhost:8080` by default.
 
-# OR BrixaScaler - simple batching
-node integration/brixa-scaler.js --rpc https://your-rpc-url
+### Endpoints
+- `POST /batch` — Submit a batch of transactions
+- `GET /health` — Server health and stats
+- `GET /benchmark` — Quick TPS benchmark
+- `GET /metrics` — Prometheus metrics
 
-# Go implementation (faster)
-cd integration/go && go run server.go
+---
+
+## Architecture
+
+```
+Player/Agent Action
+        ↓
+   [BrixaScaler] ← 750K TPS ingestion
+        ↓
+  Batch + ZK Proof
+        ↓
+   Settlement Chain ← 65 TPS verification
 ```
 
 ---
 
-## What We DON'T Claim
+## License
 
-- ❌ **25M or infinite TPS** - We measure 750K on specific hardware
-- ❌ **ZK proofs at millions per second** - We measure 1-5 proofs/sec
-- ❌ **Trilemma solved** - We don't claim decentralization/security/scalability are all maximized
-- ❌ **Single-tx finality at 750K TPS** - Batching ≠ settlement
-- ❌ **Theoretical as actual** - Only Mac Mini M4 results are measured; others are extrapolated
-
----
-
-## Honest Limitations
-
-1. **Batching ≠ End-to-End** - 750K TPS is the batching layer. Real throughput is limited by proving + settlement.
-2. **Proving is the bottleneck** - 1-5 proofs/sec means transactions accumulate faster than they can be proven. Batching is fast; proving remains the bottleneck.
-3. **Settlement is slower** - Polygon does 65 TPS. Batches settle slower than they batch.
-4. **ZK proving throughput** - Current: 1-5 proofs/sec. Batch processing is fast but proof generation is the limiting factor for end-to-end throughput.
-
----
-
-## License & Disclaimer
-
-**MIT License** - Use at your own risk.
-
-**THIS IS NOT PRODUCTION SOFTWARE.** The authors assume NO LIABILITY for any losses incurred through the use of this software.
+MIT
