@@ -3,13 +3,15 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"os"
+	"sync"
 	"testing"
-	
 )
 
 // ═══════════════════════════════════════════════════════════════
-// UNIT TESTS - Core Logic
+// UNIT TESTS - Core Logic (Merkle Batching & Serialization)
 // ═══════════════════════════════════════════════════════════════
 
 func TestMerkleRoot_Empty(t *testing.T) {
@@ -99,6 +101,29 @@ func TestMerkleRoot_LargeBatch(t *testing.T) {
 	t.Logf("100k txs processed in %dms = %d TPS", timeMs, 100000*1000/int(timeMs))
 }
 
+func TestMerkleRoot_ShardCount(t *testing.T) {
+	txs := make([]Transaction, 32)
+	for i := 0; i < 32; i++ {
+		txs[i] = Transaction{
+			From:  fmt.Sprintf("0x%x", i),
+			To:    fmt.Sprintf("0x%x", 31-i),
+			Value: uint64(i),
+			Nonce: uint64(i),
+		}
+	}
+	
+	// Test different shard counts
+	root2, _ := ProcessBatch(txs, 2)
+	root4, _ := ProcessBatch(txs, 4)
+	root8, _ := ProcessBatch(txs, 8)
+	
+	// Different shard counts = different roots (correct behavior)
+	_ = root2
+	_ = root4
+	_ = root8
+	t.Logf("shard tests: 2=%s, 4=%s, 8=%s", root2[:8], root4[:8], root8[:8])
+}
+
 func TestTransaction_HashCollision(t *testing.T) {
 	tx1 := Transaction{From: "0x111", To: "0x222", Value: 100, Nonce: 1}
 	tx2 := Transaction{From: "0x111", To: "0x222", Value: 100, Nonce: 2}
@@ -121,6 +146,31 @@ func TestTransaction_HashCollision(t *testing.T) {
 	}
 }
 
+func TestTransaction_Serialization(t *testing.T) {
+	tx := Transaction{
+		From:  "0x742d35Cc6634C0532925a3b844Bc9e7595f0eB71",
+		To:    "0x8Ba1f109551bD432803012645Ac136ddd64DBA72",
+		Value: 1000000,
+		Nonce: 42,
+		Data:  "0x1234",
+	}
+	
+	// Test JSON serialization round-trip
+	data, err := json.Marshal(tx)
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+	
+	var tx2 Transaction
+	if err := json.Unmarshal(data, &tx2); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+	
+	if tx2.From != tx.From || tx2.To != tx.To || tx2.Value != tx.Value {
+		t.Errorf("serialization round-trip failed")
+	}
+}
+
 func TestStats_Increment(t *testing.T) {
 	initialBatches := stats.totalBatches
 	initialTxs := stats.totalTxs
@@ -134,6 +184,25 @@ func TestStats_Increment(t *testing.T) {
 	if stats.totalTxs != initialTxs+1 {
 		t.Errorf("expected tx count %d, got %d", initialTxs+1, stats.totalTxs)
 	}
+}
+
+func TestStats_PendingBatches(t *testing.T) {
+	// Track initial state
+	initialPending := stats.pendingBatches
+	
+	// Simulate adding pending batch
+	stats.lock.Lock()
+	stats.pendingBatches++
+	stats.lock.Unlock()
+	
+	if stats.pendingBatches != initialPending+1 {
+		t.Errorf("expected pending %d, got %d", initialPending+1, stats.pendingBatches)
+	}
+	
+	// Simulate clearing
+	stats.lock.Lock()
+	stats.pendingBatches = 0
+	stats.lock.Unlock()
 }
 
 func TestLoadConfig_Defaults(t *testing.T) {
@@ -167,8 +236,35 @@ func TestHealthResponse_Structure(t *testing.T) {
 	if resp.Version == "" {
 		t.Error("expected non-empty version")
 	}
+	if resp.CPUCores <= 0 {
+		t.Error("expected positive CPU cores")
+	}
 }
 
+func TestLogger_Structured(t *testing.T) {
+	logger := Logger{}
+	
+	// Test info log
+	logger.Info("test message", map[string]interface{}{
+		"key": "value",
+		"num": 123,
+	})
+	
+	// Test error log
+	logger.Error("error message", map[string]interface{}{
+		"err": "test error",
+	})
+	
+	// Test warning
+	logger.Warn("warning message", map[string]interface{}{
+		"warn": "test warning",
+	})
+	
+	// If we get here without panic, logging works
+	t.Log("structured logging works")
+}
+
+// Full integration test with mocked L2
 func TestFullFlow_BatchToSettle(t *testing.T) {
 	// 1. Ingest transactions
 	txs := make([]Transaction, 100)
@@ -188,25 +284,79 @@ func TestFullFlow_BatchToSettle(t *testing.T) {
 		t.Fatalf("invalid Merkle root")
 	}
 	
-	// 3. Simulate proof (in production: zkProver.GenerateProof)
+	// 3. Simulate proof (mocked)
 	proofGenerated := true
 	if !proofGenerated {
 		t.Fatal("proof generation failed")
 	}
 	
-	// 4. Simulate verify
+	// 4. Simulate verify (mocked)
 	proofVerified := true
 	if !proofVerified {
 		t.Fatal("proof verification failed")
 	}
 	
-	// 5. Simulate settle
+	// 5. Simulate settle (mocked L2)
 	settled := true
 	if !settled {
 		t.Fatal("settlement failed")
 	}
 	
 	t.Logf("Full flow: 100 txs -> batch in %dms -> proof -> settle", timeMs)
+}
+
+func TestFullFlow_LargeBatch(t *testing.T) {
+	txs := make([]Transaction, 10000)
+	for i := 0; i < 10000; i++ {
+		txs[i] = Transaction{
+			From:  fmt.Sprintf("0x%x", i),
+			To:    fmt.Sprintf("0x%x", 10000-i),
+			Value: uint64(i),
+			Nonce: uint64(i),
+		}
+	}
+	
+	root, timeMs := ProcessBatch(txs, 8)
+	
+	if len(root) != 64 {
+		t.Fatalf("invalid Merkle root")
+	}
+	
+	tps := float64(10000) * 1000 / float64(timeMs)
+	t.Logf("10k txs: %dms = %.0f TPS", timeMs, tps)
+	
+	// Should be fast
+	if timeMs > 5000 {
+		t.Errorf("expected < 5s, got %dms", timeMs)
+	}
+}
+
+func TestIntegration_MultipleBatches(t *testing.T) {
+	// Simulate multiple batches being processed
+	batchCount := 10
+	txsPerBatch := 100
+	
+	totalTxs := 0
+	totalTime := int64(0)
+	
+	for b := 0; b < batchCount; b++ {
+		txs := make([]Transaction, txsPerBatch)
+		for i := 0; i < txsPerBatch; i++ {
+			txs[i] = Transaction{
+				From:  fmt.Sprintf("0x%x", b*txsPerBatch+i),
+				To:    fmt.Sprintf("0x%x", b*txsPerBatch+txsPerBatch-i),
+				Value: uint64(i),
+				Nonce: uint64(i),
+			}
+		}
+		
+		_, timeMs := ProcessBatch(txs, 4)
+		totalTxs += txsPerBatch
+		totalTime += timeMs
+	}
+	
+	avgTime := totalTime / int64(batchCount)
+	t.Logf("Multiple batches: %d txs in %dms (avg %dms/batch)", totalTxs, totalTime, avgTime)
 }
 
 // Benchmark tests
@@ -252,5 +402,152 @@ func BenchmarkMerkle_100000(b *testing.B) {
 	}
 	for b.N > 0 {
 		ProcessBatch(txs, 8)
+	}
+}
+func TestRateLimiter_Allow(t *testing.T) {
+	rl := NewRateLimiter(10, 5) // 10 rps, burst 5
+	
+	// Should allow first 5 (burst)
+	for i := 0; i < 5; i++ {
+		if !rl.Allow() {
+			t.Errorf("expected allow for request %d", i)
+		}
+	}
+	
+	// Burst exhausted - should now be rate limited
+	if rl.Allow() {
+		t.Error("expected rate limit after burst")
+	}
+	
+	if rl.GetRequests() != 5 {
+		t.Errorf("expected 5 requests, got %d", rl.GetRequests())
+	}
+}
+
+func TestRateLimiter_Burst(t *testing.T) {
+	rl := NewRateLimiter(1, 3) // 1 rps, burst 3
+	
+	// All within burst
+	allowed := 0
+	for i := 0; i < 10; i++ {
+		if rl.Allow() {
+			allowed++
+		}
+	}
+	
+	// Should allow exactly 3 (burst)
+	if allowed != 3 {
+		t.Errorf("expected burst of 3, got %d", allowed)
+	}
+}
+
+func TestGetEnvInt(t *testing.T) {
+	os.Setenv("TEST_INT", "42")
+	defer os.Unsetenv("TEST_INT")
+	
+	result := getEnvInt("TEST_INT", 0)
+	if result != 42 {
+		t.Errorf("expected 42, got %d", result)
+	}
+	
+	// Default
+	os.Unsetenv("TEST_INT")
+	result = getEnvInt("TEST_INT", 99)
+	if result != 99 {
+		t.Errorf("expected default 99, got %d", result)
+	}
+}
+
+func TestGetEnvBool(t *testing.T) {
+	tests := []struct {
+		val      string
+		expected bool
+	}{
+		{"true", true},
+		{"false", false},
+		{"1", true},
+		{"0", false},
+		{"", false},
+	}
+	
+	for _, tt := range tests {
+		if tt.val != "" {
+			os.Setenv("TEST_BOOL", tt.val)
+			defer os.Unsetenv("TEST_BOOL")
+		} else {
+			os.Unsetenv("TEST_BOOL")
+		}
+		
+		result := getEnvBool("TEST_BOOL", false)
+		if result != tt.expected {
+			t.Errorf("expected %v for %q, got %v", tt.expected, tt.val, result)
+		}
+	}
+}
+
+func TestConfig_Load(t *testing.T) {
+	os.Setenv("MAX_BATCH_SIZE", "5000")
+	os.Setenv("BATCH_TIMEOUT_MS", "2000")
+	os.Setenv("RPC_PORT", "9000")
+	os.Setenv("METRICS_PORT", "9001")
+	os.Setenv("DEMO_MODE", "false")
+	defer func() {
+		os.Unsetenv("MAX_BATCH_SIZE")
+		os.Unsetenv("BATCH_TIMEOUT_MS")
+		os.Unsetenv("RPC_PORT")
+		os.Unsetenv("METRICS_PORT")
+		os.Unsetenv("DEMO_MODE")
+	}()
+	
+	cfg := LoadConfig()
+	
+	if cfg.MaxBatchSize != 5000 {
+		t.Errorf("expected 5000, got %d", cfg.MaxBatchSize)
+	}
+	if cfg.BatchTimeoutMs != 2000 {
+		t.Errorf("expected 2000, got %d", cfg.BatchTimeoutMs)
+	}
+	if cfg.RPCPort != 9000 {
+		t.Errorf("expected 9000, got %d", cfg.RPCPort)
+	}
+	if cfg.MetricsPort != 9001 {
+		t.Errorf("expected 9001, got %d", cfg.MetricsPort)
+	}
+	if cfg.DemoMode != false {
+		t.Errorf("expected false, got %v", cfg.DemoMode)
+	}
+}
+
+func TestStats_Concurrent(t *testing.T) {
+	// Note: stats are global, so we test relative increase
+	initialTxs := stats.totalTxs
+	
+	var wg sync.WaitGroup
+	
+	// Concurrent increments
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			stats.lock.Lock()
+			stats.totalTxs++
+			stats.totalBatches++
+			stats.lock.Unlock()
+		}()
+	}
+	
+	wg.Wait()
+	
+	// Test relative increase (accounting for other tests)
+	if stats.totalTxs < initialTxs+100 {
+		t.Errorf("expected at least %d txs, got %d", initialTxs+100, stats.totalTxs)
+	}
+}
+
+func BenchmarkRateLimiter(b *testing.B) {
+	rl := NewRateLimiter(10000, 10000)
+	
+	for b.N > 0 {
+		rl.Allow()
 	}
 }

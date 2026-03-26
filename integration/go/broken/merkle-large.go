@@ -59,8 +59,7 @@ func main() {
 	sizes := []int{10000000, 20000000, 50000000}
 	numWorkers := runtime.NumCPU()
 	
-	fmt.Printf("CPUs: %d
-", numWorkers)
+	fmt.Printf("CPUs: %d\n", numWorkers)
 	
 	fmt.Println("| Size       | Time     | TPS        |")
 	fmt.Println("|------------|----------|------------|")
@@ -103,7 +102,6 @@ func main() {
 		
 		tps := float64(size) / elapsed.Seconds()
 		
-		fmt.Printf("| %d | %7s | %10.0f |
-", size, elapsed.Round(time.Millisecond), tps)
+		fmt.Printf("| %d | %7s | %10.0f |\n", size, elapsed.Round(time.Millisecond), tps)
 	}
 }
