@@ -2,40 +2,36 @@
 
 Network routing and TPS layer.
 
-## Working ZK Pipeline with Parallel Proving (March 26, 2026)
+## Peak ZK Performance (March 26, 2026)
 
-### Results
+### Scaling Test Results
 
-| Configuration | TPS |
-|---------------|-----|
-| Sequential (1 batch) | 928 |
-| 9 parallel batches | 3,843 |
-| 18 parallel batches | 3,692 |
-| 36 parallel batches | 3,678 |
+| Batches | Time | Txs | TPS |
+|---------|------|-----|-----|
+| 9 | 2,410ms | 9,216 | 3,824 |
+| 18 | 4,760ms | 18,432 | **3,872** |
+| 36 | 10,786ms | 36,864 | 3,418 |
+| 72 | 22,802ms | 73,728 | 3,233 |
+| 100 | 34,747ms | 102,400 | 2,947 |
+| 144 | 79,900ms | 147,456 | 1,846 |
 
-**Speedup: 3.8x** with parallel proving
+### Peak Performance
+**3,872 TPS** at 18 parallel batches (Mac mini M4)
 
-### Full Pipeline
-- Witness: ~250ms per batch
-- ZK Prove: ~350ms per batch  
-- ZK Verify: ~350ms per batch
-- **Total: ~3,800 TPS** (real, verified)
+### Analysis
+- Optimal: ~18 batches (balancing parallelism vs overhead)
+- Beyond 18: CPU saturation causes diminishing returns
+- Bottleneck: CPU cores (not memory or I/O)
 
-### Architecture
-- Circuit: batch_merkle.circom (simple hash)
-- Parallel proving across multiple cores
-- Each batch = 1,024 transactions
+### Current Limits
+- Circuit: Simple addition hash
+- Batches: 1,024 txs each
+- Workers: ~9 parallel
 
-### Files
-- keys/batch_merkle.circom - Circuit source
-- keys/batch_merkle_0000.zkey - Proving key
-- keys/batch_vk.json - Verification key
-- keys/parallel-bench.js - Benchmark script
-
-### Upgrades Available
+### Next Upgrades
 - Poseidon hash (production grade)
-- More parallel workers
-- GPU acceleration
+- Larger circuit (more txs per batch)
+- GPU acceleration (20x potential)
 
 ## NOT a Blockchain
 Brixa Scaler is NOT a blockchain. It is chain-agnostic.
