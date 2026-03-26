@@ -2,49 +2,41 @@
 
 Network routing and TPS layer.
 
-## Layered Architecture
+## Architecture Components
 
-```
-┌─────────────────────────────────────────┐
-│ LAYER 0: OPTIMISTIC EXECUTION           │
-│ 100K+ TPS, <10ms latency                │
-│ Centralized or small committee first    │
-│ (Game loop needs speed, not ZK yet)     │
-└─────────────────────────────────────────┘
- │
- ▼
-┌─────────────────────────────────────────┐
-│ LAYER 1: BATCHING + MERKLE              │
-│ Aggregate actions into batches          │
-│ Cryptographic commitment, not proof     │
-│ ~25M TPS                                │
-└─────────────────────────────────────────┘
- │
- ▼
-┌─────────────────────────────────────────┐
-│ LAYER 2: ZK PROVING (periodic)          │
-│ Every 1000 ticks, prove state valid     │
-│ 938ms acceptable for settlement         │
-│ (Not real-time, just audit trail)       │
-└─────────────────────────────────────────┘
-```
+### 1. Optimistic Game Loop
+- **Purpose:** <10ms tick rate for gameplay
+- **How:** Batching for commitment (not ZK proving)
+- **TPS:** 100K+
 
-### Performance by Layer
+### 2. Merkle State Roots
+- **Purpose:** Every tick, cheap commitment
+- **How:** SHA256 Merkle tree
+- **TPS:** 25M (tested)
 
-| Layer | TPS | Latency | Use Case |
-|-------|-----|---------|----------|
-| L0 Optimistic | 100K+ | <10ms | Active gameplay |
-| L1 Merkle | 25M | ~1ms | Batch commits |
-| L2 ZK | ~4K | 938ms | Settlement/audit |
+### 3. Periodic ZK Rollup
+- **Purpose:** Every N ticks, prove state integrity
+- **How:** Your 3,800 TPS proving (sufficient)
+- **Latency:** 938ms acceptable for settlement
 
-### Why This Works
-- Game loop doesn't need ZK (too slow for real-time)
-- ZK is for settlement finality, not real-time
-- 938ms is acceptable for periodic checkpoints
+### 4. Agent Identity (ZK Credentials)
+- **Purpose:** Identity verification, not per-action
+- **Circuit:** Different from transaction proving
+- **Infra:** Reuses same ZK infrastructure
 
-### Hardware Baseline
-- **Mac mini M4**: Proof of concept baseline (~4K TPS ZK)
-- Not ceiling: GPU + cluster = million+ TPS
+## Layer Summary
+
+| Component | Purpose | TPS | When |
+|-----------|---------|-----|------|
+| Optimistic loop | Gameplay speed | 100K+ | Every tick |
+| Merkle roots | Cheap commitment | 25M | Every tick |
+| ZK rollup | Settlement audit | 4K | Every N ticks |
+| Agent ZK | Identity credentials | (same infra) | On-demand |
+
+## Advantage
+- Game loop never waits for ZK
+- ZK proves periodic integrity, not real-time
+- Same infrastructure handles both
 
 ## NOT a Blockchain
 Brixa Scaler is NOT a blockchain. It is chain-agnostic.
