@@ -2,38 +2,69 @@
 
 Network routing and TPS layer.
 
-## True Sharding Implementation (March 26, 2026)
+## Honest Performance Data (March 26, 2026)
 
-### Architecture
+### Hardware Configuration
+| Component | Specification |
+|-----------|---------------|
+| Device | Mac mini M4 |
+| CPU | Apple Silicon (9 cores) |
+| Memory | 16GB unified |
+| OS | macOS |
 
+### Reproducible Benchmark
+
+**Prerequisites:**
+```bash
+cd keys
+npm install snarkjs circomlib
 ```
-┌─────────────────────────────────────────────┐
-│           SHARDED PROVER                    │
-├─────────────────────────────────────────────┤
-│  Shard 0   │ Shard 1   │ ... │ Shard 9    │
-│  3 validators    3 validators   3 validators │
-│  4K TPS     │  4K TPS    │     │  4K TPS   │
-└─────────────────────────────────────────────┘
-           │
-           ▼
-    Aggregate: 40K+ TPS
+
+**Run benchmark:**
+```bash
+node parallel-bench.js    # Single-shard parallel proving
+node shards/sharded-prover.js  # Multi-shard simulation
 ```
 
-### Components
-- keys/shards/sharded-prover.js - True sharding implementation
-- Route transactions to shards (consistent hashing)
-- Each shard: independent validator set
+### Measured Results (Real, Verified)
 
-### Performance
+| Test | TPS | Notes |
+|------|-----|-------|
+| Sequential proving | 928 | 1 batch |
+| Parallel (9 batches) | 3,872 | Peak measured |
+| Parallel (18 batches) | 3,843 | CPU saturation |
+| Parallel (36 batches) | 3,418 | Diminishing returns |
 
-| Shards | Validators | Per Shard TPS | Aggregate TPS |
-|--------|------------|---------------|---------------|
-| 10 | 3 | 4,000 | **40,000+** |
+### Extrapolated (Not Tested)
 
-### Notes
-- Each shard runs independently
-- Cross-shard transactions need bridging
-- Shared security model (validators across shards)
+| Configuration | Estimated | Basis |
+|--------------|-----------|-------|
+| 10 shards | 38,720 | 3,872 × 10 (unverified) |
+| GPU hybrid | 60,000+ | Assumes 20x GPU (no GPU) |
+
+**Note:** Sharding and GPU numbers are theoretical - not measured on this hardware.
+
+### What's Working (Real)
+
+- ✅ Merkle tree: ~1M TPS (SHA256)
+- ✅ ZK verify: 63/sec (real snarkjs)
+- ✅ ZK prove: 3,872 TPS (real parallel proving)
+- ✅ Full pipeline: witness → prove → verify
+
+### What's Not Working
+
+- ❌ True sharding (simulation only)
+- ❌ GPU proving (no NVIDIA GPU)
+- ❌ Cross-shard transactions
+
+### For Visa Evaluation
+
+Current credible claim: **~4,000 TPS** (reproducible, verified on Mac mini M4)
+
+To get to Visa scale (24K+), would need:
+- GPU proving cluster
+- Multiple machines
+- Production circuit (Poseidon hash)
 
 ## NOT a Blockchain
 Brixa Scaler is NOT a blockchain. It is chain-agnostic.
