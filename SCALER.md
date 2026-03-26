@@ -2,32 +2,26 @@
 
 Network routing and TPS layer.
 
-## Parallelism + Batching (March 26, 2026)
+## Final Results (March 26, 2026)
 
-### Results
+### Best Configuration: 6 Levels + 4 Parallel Provers
 
-| Parallel | Batch | Total TXS | TPS |
-|----------|-------|-----------|-----|
-| 1 | 5000 | 5,000 | 9,660 |
-| 4 | 5000 | 20,000 | **15,143** |
-| 8 | 5000 | 40,000 | 15,187 |
-| 16 | 5000 | 80,000 | 15,181 |
-| 64 | 5000 | 320,000 | 16,001 |
-| 128 | 5000 | 640,000 | 15,949 |
+| Levels | Constraints | Parallel | TPS |
+|--------|-------------|----------|-----|
+| **6** | **155K** | **4** | **19,467** |
+| 8 | 205K | 4 | 15,143 |
+| 10 | 510K | 1 | 13,656 |
+| 20 | 1.01M | 1 | 6,339 |
+| 32 | 1.61M | 1 | 3,219 |
 
-### Finding
-- **Plateau: ~16K TPS** (CPU limited on M4)
-- Combining batching + parallelism gives best results
-- More provers doesn't help beyond 4-8 (CPU saturation)
+### Sweet Spot
+- **19,467 TPS** at only 1 second latency
+- 4 parallel provers (minimal resources)
+- 155K constraints (light circuit)
 
-### Best Config
-- **4 parallel provers** = 15,143 TPS
-- Sweet spot: minimal latency + high throughput
-
-### Next Steps
-1. GPU acceleration (gnark has no Metal, need custom)
-2. Multiple machines (horizontal scaling)
-3. Smaller circuit (fewer levels)
+### Code
+- keys/zk_6_levels_4.go - Best config (19,467 TPS)
+- keys/zk_batch_10k.go - 10 levels (13,656 TPS)
 
 ## NOT a Blockchain
 Brixa Scaler is NOT a blockchain. It is chain-agnostic.
