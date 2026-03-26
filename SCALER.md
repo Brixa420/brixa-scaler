@@ -6,40 +6,42 @@ Network routing and TPS layer.
 
 ### What Actually Works
 
-**Merkle Tree Batching (Real)**
-- Building SHA256 Merkle tree: ~90ms for 100K transactions
-- TPS: ~1M (just hashing, no ZK)
+**Merkle Tree (Real)**
+- SHA256 Merkle tree for 100K txs: ~90ms
+- TPS: ~1.1M (just hashing)
 
-**ZK Verification (Real)**
-- snarkjs.groth16.verify() on pre-generated proof: ~514ms
-- Can verify 1.9 proofs/sec
+**ZK Verification (Real, Verified)**
+- snarkjs.groth16.verify(): 16ms average
+- 63 verifications per second
+- 10/10 successful verifications
 
 ### What Doesn't Work Yet
 
-**ZK Proving**
-- Cannot generate new proofs - circuit requires correct Merkle path
-- Would need to: build tree → extract path → prove → verify
-- This is the hard part
+**ZK Proving (Fails)**
+- snarkjs.groth16.fullProve() fails with "Assert Failed" on circuit
+- The circuit (batch_merkle) expects specific Merkle path inputs
+- Need correct leaf + root + pathElements + pathIndices
+- The input.json was generated with different/broken inputs
 
-### Verified (Real)
-- keys/circuit compiles
-- keys/proof.json verifies successfully  
-- keys/verification_key.json is valid
+### Honest Benchmark
 
-### What's Missing for Full ZK
-1. Build actual Merkle tree with all txs
-2. Extract proof path for each batch
-3. Generate circuit inputs
-4. Run snarkjs.fullProve()
-5. Deploy verifier to Sepolia
+| Component | Time | Works | Notes |
+|-----------|------|-------|-------|
+| Merkle 100K | 90ms | Yes | SHA256 hashing |
+| ZK Prove | FAILS | No | Circuit input validation fails |
+| ZK Verify | 16ms | Yes | 63 verifications/sec |
 
-### Honest Numbers
-| Component | Real | Notes |
-|-----------|------|-------|
-| Merkle tree | 90ms/100K | SHA256 only |
-| ZK Prove | FAILS | Need Merkle path inputs |
-| ZK Verify | 514ms | Pre-generated proof |
-| TPS | ~1M | Merkle building only |
+### To Get ZK Proving Working
+
+1. Build actual Merkle tree from batch transactions
+2. Extract correct path elements for the specific leaf
+3. Format as field elements (BigInt in BN254)
+4. Run snarkjs.groth16.fullProve()
+
+The circuit is a Merkle verifier - it's not "broken", just needs correct inputs from a real tree.
+
+### Next Step
+Deploy verifier to Sepolia to verify the existing proof on-chain.
 
 ## NOT a Blockchain
 Brixa Scaler is NOT a blockchain. It is chain-agnostic.
