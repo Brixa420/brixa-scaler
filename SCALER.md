@@ -4,20 +4,27 @@ Network routing and TPS layer.
 
 ## Recent Updates (March 26, 2026)
 
-### Pipeline Architecture
-- `execution/pipeline.js` - Overlaps Batch → Prove → Settle (not sequential)
-- `execution/batch-optimizer.js` - Dynamic batching (10K-100K txs per proof)
-- `execution/gpu-prover.js` - GPU acceleration for 20x faster proving
+### Critical Interfaces
+- `execution/interfaces.js` - Standardized API between Scaler/Node Engine and settlement
 
-### Performance
-- **25M TPS** (theoretical with GPU cluster)
-- Batching: 10K-100K txs/proof (vs 2,500 before)
-- Pipeline: Parallel stages, not sequential
-- GPU: 20x speedup when NVIDIA GPU available
+#### 1. Transaction Ingestion (BatcherInput)
+Any tx format:
+- txData: Opaque payload (any format)
+- intent: "payment" | "compute" | "storage" (for sharding)
+- priority: Ordering hint (0-100)
 
-## Works With
+#### 2. Proof Output (ProofBundle)
+Any settlement layer verifies this:
+- merkleRoot, proof (SNARK/STARK), publicInputs, metadata
+- Hardware: "cpu" | "cuda" | "opencl"
 
-**Brixa Node Engine** (brixa-node-engine) - Execution layer
+#### 3. Settlement Config (SettlementConfig)
+Configurable finality:
+- mode: "time" | "batchSize" | "manual"
+- destination: "ethereum" | "polygon" | "custom" | "none"
+- compression: "none" | "recursive" | "aggregate"
+
+Presets: fast, balanced, secure, throughput
 
 ## NOT a Blockchain
 
