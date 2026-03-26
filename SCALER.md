@@ -4,44 +4,46 @@ Network routing and TPS layer.
 
 ## Honest Status (March 26, 2026)
 
-### What Actually Works
+### What Works
 
-**Merkle Tree (Real)**
-- SHA256 Merkle tree for 100K txs: ~90ms
-- TPS: ~1.1M (just hashing)
+| Component | Status | Speed |
+|-----------|--------|-------|
+| Merkle tree (SHA256) | ✅ Real | ~1M TPS |
+| ZK Verify | ✅ Real | 63/sec, 16ms |
 
-**ZK Verification (Real, Verified)**
-- snarkjs.groth16.verify(): 16ms average
-- 63 verifications per second
-- 10/10 successful verifications
+### What's Broken
 
-### What Doesn't Work Yet
+**ZK Proving** - The circuit expects specific inputs from the original trusted setup
+- proof.json was generated with inputs we don't have
+- snarkjs.groth16.fullProve() fails: "Assert Failed" on MerkleTree line 21
+- The circuit needs: leaf + root + valid pathElements + valid pathIndices
+- We can verify the existing proof but cannot generate new ones
 
-**ZK Proving (Fails)**
-- snarkjs.groth16.fullProve() fails with "Assert Failed" on circuit
-- The circuit (batch_merkle) expects specific Merkle path inputs
-- Need correct leaf + root + pathElements + pathIndices
-- The input.json was generated with different/broken inputs
+### To Fix ZK Proving
 
-### Honest Benchmark
+Option 1: Recompile circuit with new trusted setup
+```bash
+# New ptau
+snarkjs ptn bn128 20 powersoftau_0000.ptau
+# Compile circuit  
+circom batch_merkle.circom --r1cs --wasm --sym
+# New zkey
+snarkjs groth16 setup batch_merkle.r1cs powersoftau_0000.ptau batch_merkle_0000.zkey
+# Contribute  
+snarkjs zkc batch_merkle_0000.zkey batch_merkle_final.zkey
+```
 
-| Component | Time | Works | Notes |
-|-----------|------|-------|-------|
-| Merkle 100K | 90ms | Yes | SHA256 hashing |
-| ZK Prove | FAILS | No | Circuit input validation fails |
-| ZK Verify | 16ms | Yes | 63 verifications/sec |
+Option 2: Use PLONK (no trusted setup required)
+```bash
+snarkjs pk setup batch_merkle.r1cs powersoftau.ptau batch_merkle.zkey
+snarkjs pkp batch_merkle.zkey witness.wtns proof.json public.json
+```
 
-### To Get ZK Proving Working
+### Current Numbers
 
-1. Build actual Merkle tree from batch transactions
-2. Extract correct path elements for the specific leaf
-3. Format as field elements (BigInt in BN254)
-4. Run snarkjs.groth16.fullProve()
-
-The circuit is a Merkle verifier - it's not "broken", just needs correct inputs from a real tree.
-
-### Next Step
-Deploy verifier to Sepolia to verify the existing proof on-chain.
+- Merkle build (100K): 90ms → 1.1M TPS
+- ZK verify: 16ms → 63/sec
+- ZK prove: FAILS
 
 ## NOT a Blockchain
 Brixa Scaler is NOT a blockchain. It is chain-agnostic.
