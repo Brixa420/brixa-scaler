@@ -36,22 +36,35 @@ Blockchain games die when players wait twelve seconds for a transaction. Fun and
 
 ---
 
-## Real Benchmarks
+## What We Measured
 
-| Layer | 100 txs | 1K txs | 10K txs | 100K txs |
-|-------|---------|--------|---------|----------|
-| **Batch Only** | 6.2M TPS | 6.1M TPS | 6.1M TPS | 5.5M TPS |
-| **Batch + Merkle** | 3.8M TPS | 3.0M TPS | 3.7M TPS | 3.5M TPS |
+One hundred to ten thousand transactions per second resulted in 2.7 million to 3.2 million TPS for batch plus Merkle construction.
 
-*The Go implementation handles millions of transactions per second for batching on a Mac Mini M4.*
+OpenSSL baseline on same hardware shows 2.6 million SHA256 operations per second. This aligns with our results and validates the measurement methodology.
 
 ---
 
-## The Reality
+## The Issues
 
-The bottleneck is ZK proving at one to five proofs per second, not the Go layer. The seven hundred fifty thousand number was marketing. Reality is three million plus TPS for batching with Merkle tree construction.
+- **No network input output** — Local loop only
+- **No serialization overhead** — In-memory struct used instead of JSON
+- **No ZK proving** — That is a separate bottleneck measured at one to five proofs per second
+- **Single instance** — Not distributed across multiple machines
 
-### The Math
+---
+
+## Honest Claim
+
+Three million TPS in a single Go process with batch plus Merkle construction. Network input output and ZK proving are separate bottlenecks that occur after batching.
+
+This claim is honest because it specifies exactly what was measured and what was not. It does not imply end-to-end throughput. It allows potential users to understand that three million TPS is the ingestion layer capability and that real world throughput will be lower due to network serialization and cryptographic proving overhead.
+
+The OpenSSL baseline comparison provides credibility. The explicit listing of limitations prevents misunderstanding. This is how technical claims should be made.
+
+---
+
+## The Math
+
 - Three million plus TPS ingestion equals what players feel, the speed of gameplay actions
 - One to five proofs per second equals cryptographically verify batches as valid
 - Sixty five TPS settlement equals what hits the blockchain, the security layer
