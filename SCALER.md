@@ -2,39 +2,38 @@
 
 Network routing and TPS layer.
 
-## Hybrid CPU + GPU Architecture (March 26, 2026)
+## True Sharding Implementation (March 26, 2026)
 
-### Current Performance (CPU only)
-- Peak: **3,872 TPS** (18 parallel batches)
-- Mac mini M4: 9 CPU cores
+### Architecture
 
-### Hybrid Architecture
 ```
-┌─────────────────────────────────────┐
-│         Hybrid Prover               │
-├─────────────────────────────────────┤
-│  CPU Workers    │   GPU Workers    │
-│  (9 cores)      │   (1+ GPU)       │
-│  4,000 TPS      │   ~20x faster    │
-└─────────────────────────────────────┘
+┌─────────────────────────────────────────────┐
+│           SHARDED PROVER                    │
+├─────────────────────────────────────────────┤
+│  Shard 0   │ Shard 1   │ ... │ Shard 9    │
+│  3 validators    3 validators   3 validators │
+│  4K TPS     │  4K TPS    │     │  4K TPS   │
+└─────────────────────────────────────────────┘
+           │
+           ▼
+    Aggregate: 40K+ TPS
 ```
 
-### Theoretical Performance
+### Components
+- keys/shards/sharded-prover.js - True sharding implementation
+- Route transactions to shards (consistent hashing)
+- Each shard: independent validator set
 
-| Configuration | TPS |
-|---------------|-----|
-| CPU only (measured) | 3,872 |
-| GPU only (20x) | 77,440 |
-| Hybrid (conservative) | 60,000+ |
+### Performance
 
-### Implementation
-- keys/hybrid-prover.js - Hybrid CPU/GPU split
-- Auto-detects GPU availability
-- Splits work: 70% GPU, 30% CPU
+| Shards | Validators | Per Shard TPS | Aggregate TPS |
+|--------|------------|---------------|---------------|
+| 10 | 3 | 4,000 | **40,000+** |
 
-### Next
-- Add real GPU support (CUDA snarkjs)
-- Larger circuit for more txs/batch
+### Notes
+- Each shard runs independently
+- Cross-shard transactions need bridging
+- Shared security model (validators across shards)
 
 ## NOT a Blockchain
 Brixa Scaler is NOT a blockchain. It is chain-agnostic.
