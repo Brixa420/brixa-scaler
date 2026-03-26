@@ -177,3 +177,66 @@ This software handles cryptographic operations and blockchain transactions. Secu
 - Container security best practices
 - No hardcoded secrets in code
 - Audit logging for all critical operations
+
+---
+
+## Detailed Security Requirements
+
+### Private Key Security
+- Never log private keys to console, files, or external services
+- Load private keys exclusively from environment variables or secure vaults like AWS KMS, HashiCorp Vault, or similar
+- Encrypt private key files at rest using AES-256 or equivalent
+- Support hardware wallet integration for high value operations
+- Implement key rotation mechanism without downtime
+- Validate private key format before use to prevent errors
+
+### API Security
+- Require authentication on all endpoints using API keys or JWT tokens
+- Implement request signing for critical operations
+- Validate and sanitize all input data to prevent injection attacks
+- Enforce rate limiting per client IP and per API key
+- Use HTTPS only with TLS 1.3, disable HTTP entirely
+- Implement CORS policy restricting access to known origins
+- Add request size limits to prevent DoS via large payloads
+- Log all API access with timestamps, client IDs, and actions for audit
+
+### Settlement Transaction Security
+- Verify transaction signing before broadcast to blockchain
+- Implement gas price limits with maximum thresholds to prevent overpayment
+- Track nonces per account to prevent stuck or duplicate transactions
+- Simulate transactions before broadcast to catch errors early
+- Monitor transaction confirmations with timeout and retry logic
+- Require explicit confirmation for transactions above value thresholds
+- Implement circuit breaker for failed settlement attempts
+
+### Zero Knowledge Security
+- Document ZK circuit assumptions and trusted setup if applicable
+- Implement proof verification before accepting as valid
+- Validate public inputs match expected constraints
+- Add timeout for proof generation to prevent resource exhaustion
+- Log proof generation failures for analysis
+
+### Container and Infrastructure Security
+- Run containers as non-root user
+- Use minimal base images like distroless or alpine
+- Pin all dependency versions with hash verification
+- Scan dependencies for known CVEs before deployment
+- Never embed secrets in Docker images or code
+- Use secrets management service for runtime configuration
+- Enable read-only filesystem where possible
+- Implement health checks that do not expose sensitive data
+
+### Operational Security
+- Maintain audit log of all critical operations including key access and settlement
+- Implement log integrity protection to prevent tampering
+- Add monitoring and alerting for suspicious patterns
+- Require multi-signature or approval for high value settlements
+- Implement graceful degradation under load
+- Document incident response procedures
+
+### Security Documentation
+- Add SECURITY.md file with vulnerability reporting process
+- Document threat model and mitigations
+- List known limitations and risks
+- Provide hardening guide for production deployment
+- Specify security audit status and date
