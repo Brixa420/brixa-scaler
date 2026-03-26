@@ -1,0 +1,42 @@
+name: Benchmarks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  go-benchmark:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Go benchmarks
+        run: |
+          cd integration/go
+          go mod download
+          go test -bench=. -benchmem -count=5 -run=^$ ./... > benchmark_results.txt
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-benchmark-results
+          path: integration/go/benchmark_results.txt
+
+  js-benchmark:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run JS benchmarks
+        run: |
+          cd integration
+          npm install
+          node benchmark.js > js_benchmark_results.txt
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: js-benchmark-results
+          path: integration/js_benchmark_results.txt

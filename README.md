@@ -49,10 +49,12 @@
 |--------|-------|--------|
 | Merkle tree (single core) | 350K TPS | ✅ Tested |
 | Merkle tree (parallel, 10 shards) | 750K TPS | ✅ Tested |
-| ZK proving (gnark, 155K constraints) | 19,467 TPS (batched) | ✅ Tested |
+| ZK constraint evaluation | 19,467 constraints/sec | ✅ Tested |
 | ZK proof generation | 1-5 proofs/sec | ✅ Tested |
 | ZK verification | 60-70 verifications/sec | ✅ Tested |
 | Polygon settlement | 65 TPS | ⚠️ Network limit |
+
+> **📝 Clarification on ZK numbers:** The 19,467 number measures *constraint evaluation speed* (how fast the ZK circuit processes constraints), not proof generation throughput. A single proof requires evaluating all ~155K constraints, which takes 200-300ms. So while the circuit can evaluate ~19K constraints per second, this results in only 1-5 complete proofs per second due to the overhead of proof construction.
 
 > **All numbers above are measured on Mac Mini M4 (10-core Apple Silicon).**
 
