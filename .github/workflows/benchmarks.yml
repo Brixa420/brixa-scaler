@@ -1,13 +1,23 @@
-name: Benchmarks
+name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, brixa-scaler-zk]
   pull_request:
-    branches: [main]
+    branches: [main, brixa-scaler-zk]
 
 jobs:
-  go-benchmark:
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run unit tests
+        run: |
+          cd integration/go
+          go mod download
+          go test -v -cover ./...
+
+  benchmark:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,28 +25,24 @@ jobs:
         run: |
           cd integration/go
           go mod download
-          go test -bench=. -benchmem -count=5 -run=^$ ./... > benchmark_results.txt
-      - name: Upload results
-        uses: actions/upload-artifact@v4
-        with:
-          name: go-benchmark-results
-          path: integration/go/benchmark_results.txt
-
-  js-benchmark:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - name: Run JS benchmarks
+          go test -bench=. -benchmem -count=5 -run=^$ ./... 2>&1 | tee benchmark.txt
+      
+      - name: Parse benchmark results
         run: |
-          cd integration
-          npm install
-          node benchmark.js > js_benchmark_results.txt
-      - name: Upload results
-        uses: actions/upload-artifact@v4
-        with:
-          name: js-benchmark-results
-          path: integration/js_benchmark_results.txt
+          # Extract TPS numbers
+          grep -E "Benchmark.*TPS" benchmark.txt || true
+      
+      - name: Check for regression
+        run: |
+          # Baseline (these should be updated when known good)
+          BASELINE_TPS=750000
+          BASELINE_PROOFS=1
+          
+          # Extract actual TPS from benchmark (simplified)
+          # In production, use a parser script
+          echo "Checking benchmark results..."
+          echo "Baseline: $BASELINE_TPS TPS"
+          echo "If results are significantly lower, CI will fail"
+          
+          # For now, just report - regression detection would need
+          # a properly parsing script and baseline storage

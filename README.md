@@ -10,15 +10,45 @@
 
 ---
 
-## ⚠️ WARNING: DEMO/PROOF OF CONCEPT ⚠️
+## 🚀 Quick Start (Copy-Paste)
 
-**THIS IS NOT PRODUCTION SOFTWARE**
+```bash
+# 1. Clone and enter directory
+git clone https://github.com/Brixa420/brixa-scaler.git
+cd brixa-scaler
 
-- Default mode: **DEMO_MODE=true** (logs transactions, does NOT actually send)
-- For testing/development only
-- Use `DEMO_MODE=false` to actually submit transactions
-- **Author assumes NO LIABILITY for any losses**
-- Use at **YOUR OWN RISK**
+# 2. Start full stack (Ganache + BrixaScaler + Prometheus + Grafana)
+make docker-up
+
+# 3. Check it's running
+curl http://localhost:9090/stats
+
+# 4. Run benchmarks
+make benchmark
+
+# 5. View metrics dashboard
+# Open http://localhost:3001 (admin/admin)
+
+# Stop everything
+make docker-down
+```
+
+**That's it!** For local development without Docker, see [Local Development](#local-development) below.
+
+---
+
+## ⚠️ IMPORTANT: DEMO MODE
+
+**DEFAULT IS DEMO MODE** - Transactions are logged but NOT sent to any blockchain!
+
+```bash
+# To enable real transactions:
+export DEMO_MODE=false
+export SETTLEMENT_RPC_URL=https://polygon-rpc.com
+export SETTLEMENT_PRIVATE_KEY=your_private_key_here
+```
+
+**⚠️ WARNING: Operating with `DEMO_MODE=false` involves REAL MONEY. Use at your own risk.**
 
 ---
 

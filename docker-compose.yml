@@ -17,21 +17,28 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "8545:8545"  # RPC (expose to host)
+      - "8080:8080"  # RPC
       - "9090:9090"  # Metrics
     environment:
       - DEMO_MODE=true
       - SETTLEMENT_RPC_URL=http://blockchain:8545
       - VERIFIER_ADDRESS=0x0000000000000000000000000000000000000000
       - LOG_LEVEL=info
+      - LOG_FORMAT=json
       - METRICS_ENABLED=true
+      - METRICS_PORT=9090
+      - RPC_PORT=8080
     depends_on:
       - blockchain
     volumes:
       - brixa-data:/app/data
     networks:
       - brixa-net
-    command: /app/scaler --config /app/config.yaml
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # Prometheus for metrics collection
   prometheus:
