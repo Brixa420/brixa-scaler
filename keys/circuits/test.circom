@@ -1,10 +1,3 @@
 pragma circom 2.0.0;
-
-template Multiply() {
-    signal input a;
-    signal input b;
-    signal output c;
-    c <== a * b;
-}
-
-component main {public [c]} = Multiply();
+template A() { signal output o; o <== 1; }
+component main = A();
