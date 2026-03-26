@@ -240,3 +240,26 @@ This software handles cryptographic operations and blockchain transactions. Secu
 - List known limitations and risks
 - Provide hardening guide for production deployment
 - Specify security audit status and date
+
+---
+
+## Environment Variables
+
+### Security
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `API_KEY` | - | Authentication key (header `X-API-Key` or `?api_key=`) |
+| `RATE_LIMIT_PER_SECOND` | 10 | Requests per second per client |
+| `RATE_LIMIT_BURST` | 20 | Burst allowance for rate limiting |
+| `MAX_REQUEST_SIZE` | 1048576 | Max request size in bytes (1MB) |
+| `MAX_GAS_PRICE_GWEI` | 100 | Maximum gas price in Gwei |
+| `CORS_ORIGINS` | - | Comma-separated allowed origins |
+| `MAX_TX_VALUE` | 1000 ETH | Maximum transaction value |
+| `MAX_TX_DATA_SIZE` | 1024 | Max transaction data size |
+| `REDIRECT_HTTP_TO_HTTPS` | false | Redirect HTTP to HTTPS |
+
+### Settlement (when DEMO_MODE=false)
+| Variable | Description |
+|----------|-------------|
+| `SETTLEMENT_PRIVATE_KEY` | Private key for signing transactions |
+| `SETTLEMENT_RPC_URL` | Blockchain RPC URL |

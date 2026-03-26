@@ -374,13 +374,18 @@ func SetupServer() *http.ServeMux {
 	if config.MetricsEnabled {
 		mux.HandleFunc("/metrics", handleMetrics)
 	}
+	mux.HandleFunc("/audit", handleAuditLog)
 	return mux
 }
 
 // Secure middleware chain
 func secureMiddleware(next http.Handler) http.Handler {
+	// Security headers first
+	handler := securityHeaders(next)
+	// HTTPS redirect
+	handler = httpsRedirectMiddleware(handler)
 	// Rate limiting
-	handler := rateLimitMiddleware(next)
+	handler = rateLimitMiddleware(handler)
 	// Request size limit
 	handler = requestSizeMiddleware(secConfig.MaxRequestSize)(handler)
 	// CORS
@@ -500,4 +505,313 @@ func RunMain() {
 
 func main() {
 	RunMain()
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PRIVATE KEY SECURITY
+// ═══════════════════════════════════════════════════════════════
+
+// LoadPrivateKey loads and validates private key from environment
+func LoadPrivateKey() (string, error) {
+	key := os.Getenv("SETTLEMENT_PRIVATE_KEY")
+	if key == "" {
+		return "", nil // Not configured - demo mode
+	}
+	
+	// Remove 0x prefix if present
+	if strings.HasPrefix(key, "0x") {
+		key = key[2:]
+	}
+	
+	// Validate hex length (32 bytes = 64 hex chars)
+	if len(key) != 64 {
+		return "", fmt.Errorf("invalid private key length: %d (expected 64)", len(key))
+	}
+	
+	_, err := hex.DecodeString(key)
+	if err != nil {
+		return "", fmt.Errorf("invalid private key format: %v", err)
+	}
+	
+	return "0x" + key, nil
+}
+
+// ValidateAddress validates Ethereum address format
+func ValidateAddress(addr string) error {
+	if addr == "" {
+		return fmt.Errorf("address is empty")
+	}
+	
+	if strings.HasPrefix(addr, "0x") {
+		addr = addr[2:]
+	}
+	
+	if len(addr) != 40 {
+		return fmt.Errorf("invalid address length: %d (expected 40)", len(addr))
+	}
+	
+	_, err := hex.DecodeString(addr)
+	if err != nil {
+		return fmt.Errorf("invalid address format: %v", err)
+	}
+	
+	return nil
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TRANSACTION VALIDATION
+// ═══════════════════════════════════════════════════════════════
+
+// ValidateTransaction validates a transaction before processing
+func ValidateTransaction(tx Transaction) error {
+	if err := ValidateAddress(tx.From); err != nil {
+		return fmt.Errorf("invalid 'from' address: %v", err)
+	}
+	if err := ValidateAddress(tx.To); err != nil {
+		return fmt.Errorf("invalid 'to' address: %v", err)
+	}
+	if tx.Value == 0 && tx.Data == "" {
+		return fmt.Errorf("transaction has no value and no data")
+	}
+	return nil
+}
+
+// ValidateBatch validates a batch of transactions
+func ValidateBatch(txs []Transaction) error {
+	for i, tx := range txs {
+		if err := ValidateTransaction(tx); err != nil {
+			return fmt.Errorf("transaction %d: %v", i, err)
+		}
+	}
+	return nil
+}
+
+// CheckGasPrice checks if gas price is within limits
+func CheckGasPrice(gasPrice uint64, maxGwei uint64) error {
+	gasPriceGwei := gasPrice / 1_000_000_000
+	if gasPriceGwei > maxGwei {
+		return fmt.Errorf("gas price %d Gwei exceeds max %d Gwei", gasPriceGwei, maxGwei)
+	}
+	return nil
+}
+
+// ═══════════════════════════════════════════════════════════════
+// AUDIT LOGGING
+// ═══════════════════════════════════════════════════════════════
+
+type AuditEntry struct {
+	Timestamp   string      `json:"timestamp"`
+	Action      string      `json:"action"`
+	ClientIP    string      `json:"client_ip"`
+	UserAgent   string      `json:"user_agent"`
+	APIKey      string      `json:"api_key_hash"`
+	Success     bool        `json:"success"`
+	Error       string      `json:"error,omitempty"`
+	Details     interface{} `json:"details,omitempty"`
+}
+
+var auditLog []AuditEntry
+var auditLogMu sync.Mutex
+
+func logAudit(action string, r *http.Request, success bool, err error, details interface{}) {
+	auditLogMu.Lock()
+	defer auditLogMu.Unlock()
+	
+	entry := AuditEntry{
+		Timestamp: time.Now().Format(time.RFC3339),
+		Action:    action,
+		ClientIP:  r.RemoteAddr,
+		UserAgent: r.UserAgent(),
+		Success:   success,
+		Details:   details,
+	}
+	
+	if err != nil {
+		entry.Error = err.Error()
+	}
+	
+	// Hash API key if present
+	if apiKey := r.Header.Get("X-API-Key"); apiKey != "" {
+		hash := sha256.Sum256([]byte(apiKey))
+		entry.APIKey = fmt.Sprintf("%x", hash[:8])
+	}
+	
+	auditLog = append(auditLog, entry)
+	
+	// Keep only last 1000 entries
+	if len(auditLog) > 1000 {
+		auditLog = auditLog[len(auditLog)-1000:]
+	}
+	
+	logger.Info("audit: "+action, map[string]interface{}{
+		"success": success,
+		"client":  r.RemoteAddr,
+	})
+}
+
+func handleAuditLog(w http.ResponseWriter, r *http.Request) {
+	auditLogMu.Lock()
+	defer auditLogMu.Unlock()
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(auditLog)
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ADDITIONAL SECURITY MIDDLEWARE
+// ═══════════════════════════════════════════════════════════════
+
+// SanitizeInput sanitizes user input to prevent injection
+func SanitizeInput(s string) string {
+	// Remove null bytes and control characters
+	result := make([]rune, 0, len(s))
+	for _, r := range s {
+		if r > 31 && r != 127 {
+			result = append(result, r)
+		}
+	}
+	return string(result)
+}
+
+// SanitizeTransaction sanitizes transaction data
+func SanitizeTransaction(tx Transaction) Transaction {
+	tx.From = SanitizeInput(tx.From)
+	tx.To = SanitizeInput(tx.To)
+	tx.Data = SanitizeInput(tx.Data)
+	return tx
+}
+
+// HTTPSRedirect middleware redirects HTTP to HTTPS
+func httpsRedirectMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.TLS == nil {
+			// HTTP request - check if HTTPS redirect enabled
+			if os.Getenv("REDIRECT_HTTP_TO_HTTPS") == "true" {
+				httpsURL := "https://" + r.Host + r.URL.Path
+				if r.URL.RawQuery != "" {
+					httpsURL += "?" + r.URL.RawQuery
+				}
+				http.Redirect(w, r, httpsURL, http.StatusMovedPermanently)
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// NoSniff middleware prevents content type sniffing
+func noSniffMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("X-XSS-Protection", "1; mode=block")
+		w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		next.ServeHTTP(w, r)
+	})
+}
+
+// SecurityHeaders adds security headers to all responses
+func securityHeaders(next http.Handler) http.Handler {
+	return noSniffMiddleware(next)
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SETTLEMENT SAFETY
+// ═══════════════════════════════════════════════════════════════
+
+// CircuitBreaker tracks settlement failures
+type CircuitBreaker struct {
+	failures    int
+	maxFailures int
+	opened      bool
+	lastFailure time.Time
+	resetAfter  time.Duration
+	mu          sync.Mutex
+}
+
+func NewCircuitBreaker(maxFailures int, resetAfter time.Duration) *CircuitBreaker {
+	return &CircuitBreaker{
+		maxFailures: maxFailures,
+		resetAfter:  resetAfter,
+	}
+}
+
+func (cb *CircuitBreaker) RecordSuccess() {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+	cb.failures = 0
+	cb.opened = false
+}
+
+func (cb *CircuitBreaker) RecordFailure() {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+	cb.failures++
+	cb.lastFailure = time.Now()
+	if cb.failures >= cb.maxFailures {
+		cb.opened = true
+	}
+}
+
+func (cb *CircuitBreaker) IsOpen() bool {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+	
+	if cb.opened {
+		// Check if reset time has passed
+		if time.Since(cb.lastFailure) > cb.resetAfter {
+			cb.opened = false
+			cb.failures = 0
+			return false
+		}
+		return true
+	}
+	return false
+}
+
+// Global circuit breaker for settlement
+var settlementBreaker = NewCircuitBreaker(5, 5*time.Minute)
+
+// ═══════════════════════════════════════════════════════════════
+// INPUT VALIDATION ENHANCEMENTS
+// ═══════════════════════════════════════════════════════════════
+
+// MaxValues holds maximum values for validation
+type MaxValues struct {
+	MaxValue       uint64 `env:"MAX_TX_VALUE"`
+	MaxDataSize    int    `env:"MAX_TX_DATA_SIZE"`
+	MaxBatchSize   int    `env:"MAX_BATCH_SIZE"`
+}
+
+func LoadMaxValues() MaxValues {
+	return MaxValues{
+		MaxValue:     getEnvUint64("MAX_TX_VALUE", 1_000_000_000_000_000_000), // 1000 ETH
+		MaxDataSize:  getEnvInt("MAX_TX_DATA_SIZE", 1024),
+		MaxBatchSize: getEnvInt("MAX_BATCH_SIZE", 1000),
+	}
+}
+
+func getEnvUint64(key string, def uint64) uint64 {
+	var val uint64
+	fmt.Sscanf(os.Getenv(key), "%d", &val)
+	if val == 0 {
+		return def
+	}
+	return val
+}
+
+// CheckTransactionValue checks if transaction value is within limits
+func CheckTransactionValue(value uint64, maxValue uint64) error {
+	if value > maxValue {
+		return fmt.Errorf("transaction value %d exceeds max %d", value, maxValue)
+	}
+	return nil
+}
+
+// CheckTransactionDataSize checks data size
+func CheckTransactionDataSize(data string, maxSize int) error {
+	if len(data) > maxSize {
+		return fmt.Errorf("transaction data size %d exceeds max %d", len(data), maxSize)
+	}
+	return nil
 }
