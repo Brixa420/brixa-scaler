@@ -1,12 +1,19 @@
 # BrixaScaler
 
-**⚠️ DEMO MODE ENABLED BY DEFAULT ⚠️**
+⚠️ **IMPORTANT: DEMO MODE**
 
-> By default, the server runs in **demo mode**. No real transactions are processed. Set `DEMO_MODE=false` to enable real transaction processing.
+**DEFAULT IS DEMO MODE** — Transactions are logged but NOT sent to any blockchain!
 
+To enable real transactions:
 ```bash
-DEMO_MODE=false ./brixascaler
+export DEMO_MODE=false
+export SETTLEMENT_RPC_URL=https://your-rpc-url
+export SETTLEMENT_PRIVATE_KEY=your_private_key_here
 ```
+
+⚠️ **WARNING:** Operating with `DEMO_MODE=false` involves **REAL MONEY**. Use at your own risk.
+
+This software is provided as-is without warranty. The authors assume no liability for any losses incurred through use of this software. Always test thoroughly in demo mode before enabling real transactions.
 
 ---
 
