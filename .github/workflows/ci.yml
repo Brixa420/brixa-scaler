@@ -1,0 +1,92 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          
+      - name: Install circom
+        run: |
+          npm install -g circom
+          
+      - name: Build
+        run: cd integration/go && go build -o brixa-scaler server.go
+        
+      - name: Unit Tests
+        run: |
+          cd integration/go
+          go test -v -cover -race server.go server_test.go
+          
+      - name: Integration Tests
+        run: |
+          cd integration/go
+          go build -o test-server .
+          timeout 5 ./test-server &
+          sleep 2
+          curl -s http://localhost:8080/health | grep -q "ok"
+          curl -s http://localhost:8080/metrics | grep -q "brixa_"
+          pkill test-server || true
+          
+  benchmarks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+      - name: Run Benchmarks
+        run: |
+          cd integration/go
+          go test -bench=. -benchmem -run=^$ server.go
+          
+  zk-circuit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install circom
+        run: npm install -g circom snarkjs
+      - name: Compile Circuit
+        run: |
+          cd keys/circuits
+          circom batch_merkle.circom --r1cs --wasm --sym
+      - name: Trusted Setup
+        run: |
+          cd keys/circuits
+          snarkjs powersoftau new bn128 15 pot15_0000.ptau -v
+          snarkjs powersoftau contribute pot15_0000.ptau pot15_0001.ptau --name="first contribution" -v -e="random entropy"
+          snarkjs powersoftau prepare phase2 pot15_0001.ptau pot15_final.ptau -v
+      - name: Generate ZK Key
+        run: |
+          cd keys/circuits
+          snarkjs groth16 setup batch_merkle.r1cs pot15_final.ptau batch_merkle_0000.zkey
+          snarkjs zkey export verificationkey batch_merkle_0000.zkey verification_key.json
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker
+        run: docker build -t brixa-scaler:${{ github.sha }} .
+      - name: Run Container
+        run: |
+          docker run -d -p 8080:8080 --name brixa brixa-scaler:${{ github.sha }}
+          sleep 3
+          curl -s http://localhost:8080/health
+          docker stop brixa

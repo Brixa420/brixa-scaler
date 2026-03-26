@@ -1,7 +1,6 @@
 pragma circom 2.0.0;
 
 include "poseidon.circom";
-include "bitify.circom";
 include "switcher.circom";
 
 template MerkleTreeChecker(levels) {
@@ -24,11 +23,10 @@ template MerkleTreeChecker(levels) {
         hasher[i] = Poseidon(2);
         hasher[i].inputs[0] <== switcher[i].outL;
         hasher[i].inputs[1] <== switcher[i].outR;
-        hash[i + 1] <== hasher[i].out;
+        hash[i+1] <== hasher[i].out;
     }
 
     root === hash[levels];
 }
 
-// 2-level for testing
-component main {public [leaf, root]} = MerkleTreeChecker(2);
+component main {public [root]} = MerkleTreeChecker(4);
