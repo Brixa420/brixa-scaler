@@ -2,34 +2,40 @@
 
 Network routing and TPS layer.
 
-## Working ZK Pipeline (March 26, 2026)
+## Working ZK Pipeline with Parallel Proving (March 26, 2026)
 
-### Full ZK Pipeline Working!
+### Results
 
-| Step | Time |
-|------|------|
-| Witness generation | 244ms |
-| ZK Prove | 343ms |
-| ZK Verify | 351ms |
-| **Total** | **938ms** |
+| Configuration | TPS |
+|---------------|-----|
+| Sequential (1 batch) | 928 |
+| 9 parallel batches | 3,843 |
+| 18 parallel batches | 3,692 |
+| 36 parallel batches | 3,678 |
 
-**Throughput: 1,091 TPS** (real ZK, not simulated)
+**Speedup: 3.8x** with parallel proving
 
-### What's Working
-- Circuit: batch_merkle.circom (compiled to .r1cs, .wasm)
-- Trusted setup: batch_merkle_0000.zkey
-- Witness: snarkjs wc
-- Prove: snarkjs g16p  
-- Verify: snarkjs g16v
+### Full Pipeline
+- Witness: ~250ms per batch
+- ZK Prove: ~350ms per batch  
+- ZK Verify: ~350ms per batch
+- **Total: ~3,800 TPS** (real, verified)
+
+### Architecture
+- Circuit: batch_merkle.circom (simple hash)
+- Parallel proving across multiple cores
+- Each batch = 1,024 transactions
 
 ### Files
 - keys/batch_merkle.circom - Circuit source
 - keys/batch_merkle_0000.zkey - Proving key
 - keys/batch_vk.json - Verification key
-- keys/proof_test.json - Example proof
+- keys/parallel-bench.js - Benchmark script
 
-### Next: Poseidon Hash
-Upgrade to production-grade Poseidon hash - needs circomlib include path fix.
+### Upgrades Available
+- Poseidon hash (production grade)
+- More parallel workers
+- GPU acceleration
 
 ## NOT a Blockchain
 Brixa Scaler is NOT a blockchain. It is chain-agnostic.
