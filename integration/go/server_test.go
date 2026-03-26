@@ -551,3 +551,65 @@ func BenchmarkRateLimiter(b *testing.B) {
 		rl.Allow()
 	}
 }
+
+func TestCluster_AddNode(t *testing.T) {
+	c := &Cluster{Nodes: make(map[string]*Node)}
+	
+	node := &Node{ID: "node1", Address: "localhost", Port: 8080, Weight: 50}
+	c.AddNode(node)
+	
+	if len(c.Nodes) != 1 {
+		t.Errorf("expected 1 node, got %d", len(c.Nodes))
+	}
+	
+	if c.Nodes["node1"].Status != "active" {
+		t.Errorf("expected active status")
+	}
+}
+
+func TestCluster_RemoveNode(t *testing.T) {
+	c := &Cluster{Nodes: make(map[string]*Node)}
+	
+	c.AddNode(&Node{ID: "node1", Status: "active"})
+	c.RemoveNode("node1")
+	
+	if c.Nodes["node1"].Status != "leaving" {
+		t.Errorf("expected leaving status")
+	}
+}
+
+func TestCluster_GetLeader(t *testing.T) {
+	c := &Cluster{Nodes: make(map[string]*Node)}
+	
+	c.AddNode(&Node{ID: "node1", Weight: 50, Status: "active"})
+	c.AddNode(&Node{ID: "node2", Weight: 100, Status: "active"})
+	
+	leader := c.GetLeader()
+	if leader != "node2" {
+		t.Errorf("expected node2 as leader, got %s", leader)
+	}
+}
+
+func TestCluster_GetLeader_NoActive(t *testing.T) {
+	c := &Cluster{Nodes: make(map[string]*Node)}
+	
+	// Only inactive nodes
+	c.AddNode(&Node{ID: "node1", Status: "leaving"})
+	
+	leader := c.GetLeader()
+	if leader != "" {
+		t.Errorf("expected no leader, got %s", leader)
+	}
+}
+
+func TestCluster_ListNodes(t *testing.T) {
+	c := &Cluster{Nodes: make(map[string]*Node)}
+	
+	c.AddNode(&Node{ID: "node1", Weight: 50})
+	c.AddNode(&Node{ID: "node2", Weight: 100})
+	
+	nodes := c.ListNodes()
+	if len(nodes) != 2 {
+		t.Errorf("expected 2 nodes, got %d", len(nodes))
+	}
+}

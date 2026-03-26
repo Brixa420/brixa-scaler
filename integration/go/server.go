@@ -417,3 +417,101 @@ func main() {
 	fmt.Printf("\n🚀 BrixaScaler running on http://localhost:%d\n", rpcPort)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", rpcPort), nil))
 }
+// ═══════════════════════════════════════════════════════════════
+// MULTI-NODE COORDINATION - Cluster Management (Priority 5)
+// ═══════════════════════════════════════════════════════════════
+
+type Node struct {
+	ID        string    `json:"id"`
+	Address   string    `json:"address"`
+	Port      int       `json:"port"`
+	Status    string    `json:"status"` // "active", "joining", "leaving"
+	LastSeen  time.Time `json:"last_seen"`
+	Weight    int       `json:"weight"` // for leader election
+}
+
+type Cluster struct {
+	Nodes map[string]*Node
+	mu    sync.RWMutex
+	Self  string
+}
+
+var cluster *Cluster
+
+func (c *Cluster) AddNode(node *Node) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	node.LastSeen = time.Now()
+	node.Status = "active"
+	c.Nodes[node.ID] = node
+}
+
+func (c *Cluster) RemoveNode(id string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if node, ok := c.Nodes[id]; ok {
+		node.Status = "leaving"
+	}
+}
+
+func (c *Cluster) GetLeader() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	
+	var leader *Node
+	for _, n := range c.Nodes {
+		if n.Status != "active" {
+			continue
+		}
+		if leader == nil || n.Weight > leader.Weight {
+			leader = n
+		}
+	}
+	
+	if leader != nil {
+		return leader.ID
+	}
+	return ""
+}
+
+func (c *Cluster) ListNodes() []*Node {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	
+	result := make([]*Node, 0, len(c.Nodes))
+	for _, n := range c.Nodes {
+		result = append(result, n)
+	}
+	return result
+}
+
+func initCluster(selfID, addr string, port int) {
+	cluster = &Cluster{
+		Nodes: make(map[string]*Node),
+		Self:  selfID,
+	}
+	cluster.AddNode(&Node{
+		ID:       selfID,
+		Address:  addr,
+		Port:     port,
+		Status:   "active",
+		LastSeen: time.Now(),
+		Weight:   100,
+	})
+}
+
+// Health check for cluster
+func handleClusterHealth(w http.ResponseWriter, r *http.Request) {
+	cluster.mu.RLock()
+	nodeCount := len(cluster.Nodes)
+	leader := cluster.GetLeader()
+	cluster.mu.RUnlock()
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"node_count":    nodeCount,
+		"leader":        leader,
+		"self":          cluster.Self,
+		"nodes":         cluster.ListNodes(),
+	})
+}
