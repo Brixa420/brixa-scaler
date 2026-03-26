@@ -2,42 +2,31 @@
 
 Network routing and TPS layer.
 
-## Current Status (March 26, 2026)
+## Status (March 26, 2026)
 
 ### Working
 
 | Component | Status | Speed |
 |-----------|--------|-------|
-| Merkle tree (SHA256) | ✅ Works | ~1.1M TPS |
-| ZK Verify | ✅ Works | 16ms, 63/sec |
+| Merkle tree | ✅ | ~1.1M TPS |
+| ZK verify | ✅ | 16ms, 63/sec |
 
-### Not Working
+### ZK Proving - Needs Setup
 
-**ZK Prove** - Requires trusted setup that takes too long
-- Phase 2 preparation: hours
-- Circuit setup + contribution: more hours
+PLONK is preferred (no trusted ceremony):
+```bash
+# Create ptau (2-3 min)
+snarkjs ptn bn128 15 ptau_0000.ptau
 
-### Path Forward
+# Prepare phase 2 (~2 hours for 2^15)
+snarkjs pt2 ptau_0000.ptau ptau_final.ptau
 
-To get ZK proving working:
+# PLONK setup (no ceremony needed)
+snarkjs pk setup batch_merkle.r1cs ptau_final.ptau batch_plonk.zkey
+snarkjs pkp batch_plonk.zkey witness.wtns proof.json public.json
+```
 
-1. **Trusted setup** (takes ~4+ hours):
-   ```bash
-   snarkjs ptn bn128 20 powersoftau_0000.ptau  # 1-2 min
-   snarkjs pt2 powersoftau_0000.ptau final.ptau  # 2-4 HOURS
-   snarkjs g16s circuit.r1cs final.ptau key_0000.zkey  # 30 min
-   snarkjs zkc key_0000.zkey final.zkey  # 30 min
-   ```
-
-2. **Or use external service** - Generate proof on server with pre-built keys
-
-3. **Or simpler circuit** - Non-Merkle ZK for simpler verification
-
-### Current Numbers
-
-- Merkle (100K): 90ms → 1.1M TPS
-- ZK verify: 16ms → 63 verifications/sec
-- ZK prove: Needs new keys
+This can be run later when time permits.
 
 ## NOT a Blockchain
 Brixa Scaler is NOT a blockchain. It is chain-agnostic.
