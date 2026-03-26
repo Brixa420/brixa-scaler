@@ -130,3 +130,50 @@ Player/Agent Action
 ## License
 
 MIT
+
+---
+
+## Security Considerations
+
+This software handles cryptographic operations and blockchain transactions. Security measures include:
+- **DEMO MODE** default to prevent accidental real transactions
+- **Private keys** via environment variables only, never logged
+- **Input validation** on all API endpoints
+- **Rate limiting** to prevent abuse
+- **Transaction simulation** before broadcast
+
+### For Production Use, Additional Measures Recommended:
+- Hardware security module or KMS for key management
+- Independent security audit of ZK circuits
+- Formal verification of critical code paths
+- Bug bounty program
+- HTTPS only
+- Authentication on all endpoints
+
+---
+
+## Immediate Security Checklist
+
+### Private Key Handling
+- Never log private keys
+- Use environment variables or secure vaults only
+- Encrypt key files at rest
+- Support hardware wallets or KMS
+
+### API Security
+- Authentication on all endpoints
+- Input validation and sanitization
+- Rate limiting per client
+- HTTPS only, no HTTP fallback
+
+### Settlement Safety
+- Transaction signing verification before broadcast
+- Gas price limits to prevent overpayment
+- Nonce tracking to prevent stuck transactions
+- Confirmation monitoring with retry logic
+
+### General Hardening
+- Dependency vulnerability scanning
+- Container security best practices
+- No hardcoded secrets in code
+- Audit logging for all critical operations
