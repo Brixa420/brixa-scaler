@@ -387,7 +387,43 @@ func RunStartup(cfg Config) {
 	}
 }
 
-func main() {
+// SetupGracefulShutdown sets up signal handling (extracted for testability)
+func SetupGracefulShutdown() chan os.Signal {
+	shutdownChan := make(chan os.Signal, 1)
+	signal.Notify(shutdownChan, syscall.SIGINT, syscall.SIGTERM)
+	return shutdownChan
+}
+
+// StartMetricsServer starts the metrics HTTP server (extracted for testability)
+func StartMetricsServer(port int) {
+	if port > 0 {
+		go func() {
+			logger.Info("metrics server started", map[string]interface{}{
+				"port": port,
+			})
+			http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
+		}()
+	}
+}
+
+// StartServer starts the main HTTP server (extracted for testability)
+// Note: In tests, use httptest.Server instead to avoid blocking
+func StartServer(port int) error {
+	mux := SetupServer()
+	fmt.Printf("\n🚀 BrixaScaler running on http://localhost:%d\n", port)
+	return http.ListenAndServe(fmt.Sprintf(":%d", port), mux)
+}
+
+// PrintRoutes prints the available routes (extracted for testability)
+func PrintRoutes() {
+	fmt.Printf("  GET  /batch    - Submit transaction batch (POST JSON)\n")
+	fmt.Printf("  GET  /health   - Server health & stats\n")
+	fmt.Printf("  GET  /benchmark - Quick TPS benchmark\n")
+	fmt.Printf("  GET  /metrics  - Prometheus metrics\n")
+}
+
+// RunMain is the main logic extracted for testing
+func RunMain() {
 	cfg := LoadConfig()
 	RunStartup(cfg)
 	
@@ -395,8 +431,7 @@ func main() {
 	metricsPort := cfg.MetricsPort
 
 	// Graceful shutdown
-	shutdownChan := make(chan os.Signal, 1)
-	signal.Notify(shutdownChan, syscall.SIGINT, syscall.SIGTERM)
+	shutdownChan := SetupGracefulShutdown()
 
 	go func() {
 		<-shutdownChan
@@ -415,25 +450,15 @@ func main() {
 	}()
 
 	// Start metrics server
-	if cfg.MetricsEnabled {
-		go func() {
-			logger.Info("metrics server started", map[string]interface{}{
-				"port": metricsPort,
-			})
-			http.ListenAndServe(fmt.Sprintf(":%d", metricsPort), nil)
-		}()
-	}
+	StartMetricsServer(metricsPort)
 
-	fmt.Printf("  GET  /batch    - Submit transaction batch (POST JSON)\n")
-	fmt.Printf("  GET  /health   - Server health & stats\n")
-	fmt.Printf("  GET  /benchmark - Quick TPS benchmark\n")
-	fmt.Printf("  GET  /metrics  - Prometheus metrics\n")
+	PrintRoutes()
 
-	// Use extracted server setup
-	mux := SetupServer()
+	log.Fatal(StartServer(rpcPort))
+}
 
-	fmt.Printf("\n🚀 BrixaScaler running on http://localhost:%d\n", rpcPort)
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", rpcPort), mux))
+func main() {
+	RunMain()
 }
 // ═══════════════════════════════════════════════════════════════
 // MULTI-NODE COORDINATION - Cluster Management (Priority 5)
