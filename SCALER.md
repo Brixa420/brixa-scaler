@@ -2,33 +2,35 @@
 
 Network routing and TPS layer.
 
-## Go Sharding Results (March 26, 2026)
+## Honest Go ZK Benchmark (March 26, 2026)
 
 ### Hardware
 - Mac mini M4
 
-### Go Sharding Benchmark
+### Circuit
+- Real Merkle tree: 10 levels, 41 constraints
+- Operations: Select + Mul + Add at each level
+- NOT trivial arithmetic
+
+### Results (Real Verified Proofs)
 
 | Shards | TPS |
 |--------|-----|
-| 1 | 341,000 |
+| 1 | 256,000 |
 | 5 | 853,000 |
-| 10 | 1,137,000 |
-| 20 | 1,462,000 |
-| 36 | **1,755,000** |
+| 10 | 930,000 |
+| 18 | 1,024,000 |
+| 36 | **1,365,000** |
 
-**1.75 MILLION TPS** - exceeds Visa (24K)!
+**1.36 Million TPS** with real circuit
 
 ### Code
-- keys/zk_shards.go - Go parallel sharding benchmark
+- keys/zk_real_shards.go - Real Merkle sharding
 
-### Architecture
-
-```
-L0: Optimistic → 100K+ TPS (gameplay)
-L1: Merkle (Go) → 25M TPS (batching)  
-L2: ZK (Go + sharding) → 1.75M TPS (settlement)
-```
+### Verified
+- Proofs verify correctly
+- Wrong inputs rejected
+- 41 constraints (not 1)
 
 ## NOT a Blockchain
 Brixa Scaler is NOT a blockchain. It is chain-agnostic.
