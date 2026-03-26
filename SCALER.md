@@ -2,39 +2,25 @@
 
 Network routing and TPS layer.
 
-## Batching Results (March 26, 2026)
+## Final ZK Results (March 26, 2026)
 
-### BREAKTHROUGH: Batching Multiples Leaves Per Proof
+### Batching with Different Tree Depths
 
-| Batch | Levels | Constraints | Prove Time | TPS |
-|-------|--------|-------------|------------|-----|
-| 10 | 100 | 5,010 | 18ms | 545 |
-| 50 | 100 | 25,050 | 59ms | 843 |
-| 100 | 100 | 50,100 | 105ms | 952 |
-| 500 | 50 | 125,500 | 225ms | 2,225 |
-| 1000 | 30 | 151,000 | 332ms | 3,011 |
-| 2000 | 20 | 202,000 | 340ms | 5,883 |
-| 5000 | 10 | 255,000 | 394ms | 12,693 |
-| 10000 | 10 | 510,000 | 732ms | **13,656** |
+| Levels | Tree Size | Constraints | TPS |
+|--------|-----------|------------|-----|
+| 10 | 1K | 510K | **13,656** |
+| 20 | 1M | 1.01M | **6,339** |
+| 32 | 4B | 1.61M | **3,219** |
 
-### Key Finding
-- Batching scales: more leaves per proof = higher TPS
-- 54 TPS (single) → 13,656 TPS (batched 10K)
-- **253x improvement**
-
-### Tradeoffs
-- 10 levels = smaller Merkle tree (2^10 = 1024 leaves)
-- For production: use deeper tree + larger batch
-
-### Next Steps
-1. Production circuit with deeper tree (32+ levels)
-2. Even larger batch sizes
-3. GPU acceleration for further speedup
+### Recommendation: 20 Levels
+- **6,339 TPS** with 1 million leaf capacity
+- Good balance of security (2^20) vs speed
+- Sweet spot for most applications
 
 ### Code
-- keys/zk_batch_10k.go - 13K TPS benchmark
-- keys/zk_batch_5k.go - 12K TPS
-- keys/zk_batch_2k.go - 5K TPS
+- keys/zk_batch_10k.go - 13K TPS (10 levels)
+- keys/zk_batch_20_10k.go - 6K TPS (20 levels, 1M leaves)
+- keys/zk_batch_32_10k.go - 3K TPS (32 levels, 4B leaves)
 
 ## NOT a Blockchain
 Brixa Scaler is NOT a blockchain. It is chain-agnostic.
