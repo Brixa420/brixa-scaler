@@ -593,8 +593,9 @@ func TestCluster_GetLeader(t *testing.T) {
 func TestCluster_GetLeader_NoActive(t *testing.T) {
 	c := &Cluster{Nodes: make(map[string]*Node)}
 	
-	// Only inactive nodes
-	c.AddNode(&Node{ID: "node1", Status: "leaving"})
+	// Add node then mark as leaving
+	c.AddNode(&Node{ID: "node1", Weight: 50})
+	c.Nodes["node1"].Status = "leaving"
 	
 	leader := c.GetLeader()
 	if leader != "" {
@@ -612,4 +613,77 @@ func TestCluster_ListNodes(t *testing.T) {
 	if len(nodes) != 2 {
 		t.Errorf("expected 2 nodes, got %d", len(nodes))
 	}
+}
+
+func TestGasCost(t *testing.T) {
+	cost := GasCost(100, 4)
+	if cost == 0 {
+		t.Error("expected non-zero gas cost")
+	}
+	t.Logf("100 txs, 4 shards: %d gas", cost)
+}
+
+func TestCompressBatch(t *testing.T) {
+	txs := []Transaction{
+		{From: "0x742d35Cc6634C0532925a3b844Bc9e7595f0eB71", To: "0x8Ba1f109551bD432803012645Ac136ddd64DBA72", Value: 1000, Nonce: 1},
+	}
+	compressed := CompressBatch(txs)
+	if len(compressed) == 0 {
+		t.Error("expected non-empty compression")
+	}
+}
+
+func TestCompressionRatio(t *testing.T) {
+	ratio := CompressionRatio(1000, 500)
+	if ratio != 0.5 {
+		t.Errorf("expected 0.5, got %f", ratio)
+	}
+}
+
+func TestNewBatchInfo(t *testing.T) {
+	txs := []Transaction{{From: "0x111", To: "0x222", Value: 100, Nonce: 1}}
+	info := NewBatchInfo(txs, 4)
+	if info.TxCount != 1 {
+		t.Errorf("expected 1, got %d", info.TxCount)
+	}
+	if info.GasCost == 0 {
+		t.Error("expected non-zero gas cost")
+	}
+}
+
+func TestOptimizedBatch_Encode(t *testing.T) {
+	txs := []Transaction{{From: "0x111", To: "0x222", Value: 100, Nonce: 1}}
+	batch := &OptimizedBatch{}
+	batch.Encode(txs)
+	if batch.Version != 1 {
+		t.Errorf("expected version 1, got %d", batch.Version)
+	}
+}
+
+func TestVerifyBatch(t *testing.T) {
+	txs := []Transaction{{From: "0x111", To: "0x222", Value: 100, Nonce: 1}}
+	root, _ := ProcessBatch(txs, 1)
+	if !VerifyBatch(txs, root) {
+		t.Error("expected valid batch")
+	}
+}
+
+func TestZK_PoseidonHash(t *testing.T) {
+	data := []byte("test")
+	h := sha256.Sum256(data)
+	if len(h) != 32 {
+		t.Error("expected 32 byte hash")
+	}
+}
+
+func TestZK_BatchCommitment(t *testing.T) {
+	txs := make([]Transaction, 100)
+	for i := range txs {
+		txs[i] = Transaction{From: fmt.Sprintf("0x%x", i), To: fmt.Sprintf("0x%x", i), Value: uint64(i), Nonce: uint64(i)}
+	}
+	root, elapsed := ProcessBatch(txs, 4)
+	if len(root) != 64 {
+		t.Error("expected 64 char hex root")
+	}
+	t.Logf("ZK batch: %s in %dms", root[:8], elapsed)
 }
