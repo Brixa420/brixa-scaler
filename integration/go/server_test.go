@@ -1260,3 +1260,19 @@ func TestRunMain_ErrorPath(t *testing.T) {
 	StartMetricsServer(0)
 	PrintRoutes()
 }
+
+func TestComputeMerkleRootOdd(t *testing.T) {
+	// Test with 3 hashes - should hit the odd case
+	three := [][]byte{[]byte("a"), []byte("b"), []byte("c")}
+	r := computeMerkleRoot(three)
+	if len(r) != 32 {
+		t.Error("three failed")
+	}
+	
+	// Test with 5 hashes
+	five := [][]byte{[]byte("a"), []byte("b"), []byte("c"), []byte("d"), []byte("e")}
+	r = computeMerkleRoot(five)
+	if len(r) != 32 {
+		t.Error("five failed")
+	}
+}
