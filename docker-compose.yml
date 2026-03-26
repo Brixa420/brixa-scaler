@@ -1,0 +1,94 @@
+version: '3.8'
+
+services:
+  # Local blockchain for testing (Ganache)
+  blockchain:
+    image: trufflesuite/ganache:latest
+    ports:
+      - "8545:8545"  # RPC
+      - "8546:8546"  # WS
+    command: -d --deterministic --host 0.0.0.0 --port 8545 --chainId 1337
+    networks:
+      - brixa-net
+
+  # BrixaScaler Node
+  scaler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8545:8545"  # RPC (expose to host)
+      - "9090:9090"  # Metrics
+    environment:
+      - DEMO_MODE=true
+      - SETTLEMENT_RPC_URL=http://blockchain:8545
+      - VERIFIER_ADDRESS=0x0000000000000000000000000000000000000000
+      - LOG_LEVEL=info
+      - METRICS_ENABLED=true
+    depends_on:
+      - blockchain
+    volumes:
+      - brixa-data:/app/data
+    networks:
+      - brixa-net
+    command: /app/scaler --config /app/config.yaml
+
+  # Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    networks:
+      - brixa-net
+
+  # Grafana for metrics visualization
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana-dashboards:/etc/grafana/provisioning/dashboards
+    networks:
+      - brixa-net
+    depends_on:
+      - prometheus
+
+  # Optional: Redis for distributed state
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - brixa-net
+    command: redis-server --appendonly yes
+
+networks:
+  brixa-net:
+    driver: bridge
+
+volumes:
+  brixa-data:
+  prometheus-data:
+  grafana-data:
+  redis-data:
+
+---
+# Usage:
+# 1. Start everything: docker-compose up -d
+# 2. View logs: docker-compose logs -f scaler
+# 3. Check metrics: curl localhost:9090/stats
+# 4. Stop: docker-compose down
+#
+# For production, set:
+#   - DEMO_MODE=false
+#   - Real RPC URLs
+#   - Real verifier address

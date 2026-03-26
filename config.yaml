@@ -1,0 +1,61 @@
+# BrixaScaler Configuration
+# Environment-based configuration (no hardcoded values)
+
+# === Batching Layer ===
+batching:
+  max_batch_size: 1000
+  batch_timeout_ms: 5000
+  max_pending_txs: 100000
+
+# === ZK Prover ===
+zk:
+  circuit_name: "batch_merkle"
+  constraints: 155000
+  proving_timeout_ms: 300000
+  parallel_proofs: 4
+
+# === Settlement ===
+settlement:
+  target_chain: "polygon"
+  rpc_url: "${POLYGON_RPC_URL}"
+  verifier_address: "${VERIFIER_ADDRESS}"
+  max_settlement_gas: 500000
+  gas_price_multiplier: 1.1
+
+# === State Persistence ===
+persistence:
+  enabled: true
+  backend: "leveldb"  # leveldb, rocksdb, redis
+  path: "./data/state.db"
+  sync_writes: false
+  compression: true
+
+# === Error Handling ===
+retry:
+  max_attempts: 5
+  initial_delay_ms: 1000
+  max_delay_ms: 60000
+  backoff_multiplier: 2.0
+  jitter: true
+
+# === Observability ===
+observability:
+  metrics_enabled: true
+  metrics_port: 9090
+  log_level: "info"  # debug, info, warn, error
+  log_format: "json"  # json, text
+  trace_enabled: false
+  trace_endpoint: "http://localhost:14268/api/traces"
+
+# === Network ===
+network:
+  rpc_host: "0.0.0.0"
+  rpc_port: 8545
+  ws_enabled: true
+  ws_port: 8546
+  max_connections: 1000
+
+# === Docker ===
+docker:
+  postgres_enabled: false
+  redis_enabled: false
