@@ -2,31 +2,38 @@
 
 Network routing and TPS layer.
 
-## Status (March 26, 2026)
+## Working ZK Pipeline (March 26, 2026)
 
-### Working
+We built a new circuit from scratch with working ZK:
 
+### Components Working
 | Component | Status | Speed |
 |-----------|--------|-------|
-| Merkle tree | ✅ | ~1.1M TPS |
-| ZK verify | ✅ | 16ms, 63/sec |
+| Circuit (batch_merkle.circom) | ✅ Compiled | - |
+| Trusted setup | ✅ Done | - |
+| Witness generation | ✅ Works | 250ms |
+| ZK Prove | ✅ Works | 358ms |
+| ZK Verify | ✅ Works | 340ms |
 
-### ZK Proving - Needs Setup
-
-PLONK is preferred (no trusted ceremony):
-```bash
-# Create ptau (2-3 min)
-snarkjs ptn bn128 15 ptau_0000.ptau
-
-# Prepare phase 2 (~2 hours for 2^15)
-snarkjs pt2 ptau_0000.ptau ptau_final.ptau
-
-# PLONK setup (no ceremony needed)
-snarkjs pk setup batch_merkle.r1cs ptau_final.ptau batch_plonk.zkey
-snarkjs pkp batch_plonk.zkey witness.wtns proof.json public.json
+### Full Pipeline
+```
+1. Build Merkle tree from transactions
+2. Extract proof path
+3. Generate witness (snarkjs wc)
+4. Generate proof (snarkjs g16p)  
+5. Verify (snarkjs g16v)
 ```
 
-This can be run later when time permits.
+### Files Created
+- batch_merkle.circom - Circuit source (simple addition-based)
+- batch_merkle.r1cs, .wasm, .zkey - Compiled
+- batch_vk.json - Verification key
+- proof_test.json - Working proof example
+
+### Next Steps
+- Replace simple addition hash with Poseidon
+- Scale to more levels
+- Add to benchmark
 
 ## NOT a Blockchain
 Brixa Scaler is NOT a blockchain. It is chain-agnostic.
