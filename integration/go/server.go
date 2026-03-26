@@ -2,7 +2,6 @@ package main
 
 import (
 	"crypto/sha256"
-	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -11,7 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
-	"sort"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -19,15 +18,85 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// Logger provides structured JSON logging
+// ═══════════════════════════════════════════════════════════════
+// CONFIGURATION
+// ═══════════════════════════════════════════════════════════════
+
+type Config struct {
+	MaxBatchSize    int  `env:"MAX_BATCH_SIZE"`
+	BatchTimeoutMs int  `env:"BATCH_TIMEOUT_MS"`
+	RPCPort         int  `env:"RPC_PORT"`
+	MetricsPort     int  `env:"METRICS_PORT"`
+	MetricsEnabled  bool
+	DemoMode        bool
+}
+
+type SecurityConfig struct {
+	APIKey             string
+	RateLimitPerSecond int
+	RateLimitBurst     int
+	MaxRequestSize     int64
+	MaxGasPriceGwei    uint64
+	CORSOrigins       []string
+}
+
+func LoadConfig() Config {
+	return Config{
+		MaxBatchSize:    getEnvInt("MAX_BATCH_SIZE", 1000),
+		BatchTimeoutMs: getEnvInt("BATCH_TIMEOUT_MS", 1000),
+		RPCPort:         getEnvInt("RPC_PORT", 8080),
+		MetricsPort:     getEnvInt("METRICS_PORT", 9090),
+		MetricsEnabled:  getEnvBool("METRICS_ENABLED", true),
+		DemoMode:        getEnvBool("DEMO_MODE", true),
+	}
+}
+
+func LoadSecurityConfig() SecurityConfig {
+	return SecurityConfig{
+		APIKey:             os.Getenv("API_KEY"),
+		RateLimitPerSecond: getEnvInt("RATE_LIMIT_PER_SECOND", 10),
+		RateLimitBurst:     getEnvInt("RATE_LIMIT_BURST", 20),
+		MaxRequestSize:     getEnvInt64("MAX_REQUEST_SIZE", 1024*1024),
+		MaxGasPriceGwei:    uint64(getEnvInt("MAX_GAS_PRICE_GWEI", 100)),
+		CORSOrigins:        strings.Split(os.Getenv("CORS_ORIGINS"), ","),
+	}
+}
+
+func getEnvInt(key string, def int) int {
+	var val int
+	fmt.Sscanf(os.Getenv(key), "%d", &val)
+	return val
+}
+
+func getEnvInt64(key string, def int64) int64 {
+	var val int64
+	fmt.Sscanf(os.Getenv(key), "%d", &val)
+	if val == 0 {
+		return def
+	}
+	return val
+}
+
+func getEnvBool(key string, def bool) bool {
+	val := os.Getenv(key)
+	if val == "" {
+		return def
+	}
+	return val == "true" || val == "1"
+}
+
+// ═══════════════════════════════════════════════════════════════
+// LOGGING
+// ═══════════════════════════════════════════════════════════════
+
 type Logger struct{}
 
 func (l Logger) Info(msg string, fields map[string]interface{}) {
 	data, _ := json.Marshal(map[string]interface{}{
-		"level":        "info",
-		"message":      msg,
-		"timestamp":    time.Now().Format(time.RFC3339),
-		"correlation_id": "",
+		"level":         "info",
+		"message":       msg,
+		"timestamp":     time.Now().Format(time.RFC3339),
+		"correlationId": "",
 	})
 	fmt.Println(string(data))
 }
@@ -50,114 +119,60 @@ func (l Logger) Warn(msg string, fields map[string]interface{}) {
 	fmt.Println(string(data))
 }
 
-// Config holds all configuration for BrixaScaler
-type Config struct {
-	MaxBatchSize    int `env:"MAX_BATCH_SIZE"`
-	BatchTimeoutMs int `env:"BATCH_TIMEOUT_MS"`
-	RPCPort         int `env:"RPC_PORT"`
-	MetricsPort     int `env:"METRICS_PORT"`
-	MetricsEnabled  bool
-	DemoMode        bool
-}
+// ═══════════════════════════════════════════════════════════════
+// CORE DATA STRUCTURES
+// ═══════════════════════════════════════════════════════════════
 
-// LoadConfig loads configuration from environment
-func LoadConfig() Config {
-	cfg := Config{
-		MaxBatchSize:    getEnvInt("MAX_BATCH_SIZE", 1000),
-		BatchTimeoutMs:  getEnvInt("BATCH_TIMEOUT_MS", 1000),
-		RPCPort:         getEnvInt("RPC_PORT", 8080),
-		MetricsPort:     getEnvInt("METRICS_PORT", 9090),
-		MetricsEnabled:  getEnvBool("METRICS_ENABLED", true),
-		DemoMode:        getEnvBool("DEMO_MODE", true),
-	}
-	return cfg
-}
-
-func getEnvInt(key string, def int) int {
-	fmt.Sscanf(os.Getenv(key), "%d", &def)
-	return def
-}
-
-func getEnvBool(key string, def bool) bool {
-	if val := os.Getenv(key); val != "" {
-		return val == "true" || val == "1"
-	}
-	return def
-}
-
-// Transaction represents a simplified L2 transaction
 type Transaction struct {
-	From  string
-	To    string
-	Value uint64
-	Nonce uint64
-	Data  string
+	From  string `json:"from"`
+	To    string `json:"to"`
+	Value uint64 `json:"value"`
+	Nonce uint64 `json:"nonce"`
+	Data  string `json:"data"`
 }
 
-// Stats holds server statistics
+type BatchRequest struct {
+	Transactions []Transaction `json:"transactions"`
+	ShardID     int           `json:"shard_id"`
+}
+
+type BatchResponse struct {
+	Root      string `json:"root"`
+	BatchID   string `json:"batch_id"`
+	Timestamp int64  `json:"timestamp"`
+}
+
 type Stats struct {
-	totalBatches   uint64
-	totalTxs       uint64
+	totalBatches    uint64
+	totalTxs        uint64
 	pendingBatches uint64
 	pendingProofs  uint64
 	startTime      time.Time
 	lock           sync.Mutex
 }
 
-var stats = Stats{startTime: time.Now()}
-var logger = Logger{}
-
 // ═══════════════════════════════════════════════════════════════
-// MERKLE TREE - Core Batching Logic
+// GLOBAL STATE
 // ═══════════════════════════════════════════════════════════════
 
-func buildMerkleRoot(leaves [][]byte, numShards int) []byte {
-	if len(leaves) == 0 {
-		empty := sha256.Sum256([]byte("empty"))
-		return empty[:]
-	}
+var (
+	logger     Logger
+	stats      = Stats{startTime: time.Now()}
+	config     = LoadConfig()
+	secConfig  = LoadSecurityConfig()
+	rateLimiter = rate.NewLimiter(rate.Limit(secConfig.RateLimitPerSecond), secConfig.RateLimitBurst)
+	nonceTracker = NewNonceTracker()
+)
 
-	shardSize := (len(leaves) + numShards - 1) / numShards
+// ═══════════════════════════════════════════════════════════════
+// MERKLE TREE
+// ═══════════════════════════════════════════════════════════════
 
-	var wg sync.WaitGroup
-	roots := make([][]byte, 0, numShards)
-	result := make(chan []byte, numShards)
-
-	for i := 0; i < numShards; i++ {
-		start := i * shardSize
-		end := start + shardSize
-		if end > len(leaves) {
-			end = len(leaves)
-		}
-		if start >= len(leaves) {
-			break
-		}
-
-		wg.Add(1)
-		go func(shard [][]byte) {
-			defer wg.Done()
-			root := computeMerkleRoot(shard)
-			result <- root
-		}(leaves[start:end])
-	}
-
-	wg.Wait()
-	close(result)
-
-	for r := range result {
-		roots = append(roots, r)
-	}
-
-		sort.Slice(roots, func(i, j int) bool { return string(roots[i]) < string(roots[j]) })
-	return computeMerkleRoot(roots)
-}
-
-func computeMerkleRoot(hashes [][]byte) []byte {
+func buildMerkleRoot(hashes [][]byte, numShards int) []byte {
 	if len(hashes) == 0 {
 		empty := sha256.Sum256([]byte("empty"))
 		return empty[:]
 	}
-
 	for len(hashes) > 1 {
 		next := make([][]byte, 0, (len(hashes)+1)/2)
 		for i := 0; i < len(hashes); i += 2 {
@@ -174,7 +189,10 @@ func computeMerkleRoot(hashes [][]byte) []byte {
 	return hashes[0]
 }
 
-// ProcessBatch processes a batch of transactions
+// ═══════════════════════════════════════════════════════════════
+// BATCH PROCESSING
+// ═══════════════════════════════════════════════════════════════
+
 func ProcessBatch(txs []Transaction, numShards int) (string, int64) {
 	start := time.Now()
 
@@ -196,7 +214,10 @@ func ProcessBatch(txs []Transaction, numShards int) (string, int64) {
 	return hex.EncodeToString(root), elapsed
 }
 
-// HealthResponse is the response for /health
+// ═══════════════════════════════════════════════════════════════
+// HTTP HANDLERS
+// ═══════════════════════════════════════════════════════════════
+
 type HealthResponse struct {
 	Status         string  `json:"status"`
 	Version        string  `json:"version"`
@@ -221,7 +242,8 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 	pendingProofs := stats.pendingProofs
 	stats.lock.Unlock()
 
-	resp := HealthResponse{
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(HealthResponse{
 		Status:         "healthy",
 		Version:        "1.0.0",
 		Uptime:         uptime,
@@ -232,40 +254,6 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 		CPUCores:       runtime.NumCPU(),
 		PendingBatches: pendingBatches,
 		PendingProofs:  pendingProofs,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
-}
-
-func handleBatch(w http.ResponseWriter, r *http.Request) {
-	correlationID := fmt.Sprintf("%d", time.Now().UnixNano())
-
-	if os.Getenv("DEMO_MODE") != "false" {
-		logger.Warn("DEMO_MODE enabled - no real transactions", map[string]interface{}{
-			"correlation_id":  correlationID,
-			"warning":        "DEMO_MODE is enabled - no real transactions",
-		})
-	}
-
-	var txs []Transaction
-	if err := json.NewDecoder(r.Body).Decode(&txs); err != nil {
-		http.Error(w, err.Error(), 400)
-		return
-	}
-
-	root, elapsed := ProcessBatch(txs, 4)
-
-	logger.Info("batch processed", map[string]interface{}{
-		"correlation_id": correlationID,
-		"tx_count":      len(txs),
-		"elapsed_ms":    elapsed,
-	})
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
-		"root":   root,
-		"elapsed": fmt.Sprintf("%dms", elapsed),
 	})
 }
 
@@ -285,391 +273,231 @@ func handleBenchmark(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"root":      root,
+		"root":       root,
 		"elapsed_ms": elapsed,
-		"tps":       tps,
+		"tps":        tps,
 	})
 }
 
-// RateLimiter provides DOS protection
-type RateLimiter struct {
-	limiter  *rate.Limiter
-	requests uint64
-	mu       sync.Mutex
+func handleBatch(w http.ResponseWriter, r *http.Request) {
+	var req BatchRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if len(req.Transactions) == 0 {
+		http.Error(w, "No transactions in batch", http.StatusBadRequest)
+		return
+	}
+
+	if len(req.Transactions) > config.MaxBatchSize {
+		http.Error(w, fmt.Sprintf("Batch too large (max %d)", config.MaxBatchSize), http.StatusBadRequest)
+		return
+	}
+
+	root, elapsed := ProcessBatch(req.Transactions, 4)
+
+	logger.Info("batch processed", map[string]interface{}{
+		"tx_count":   len(req.Transactions),
+		"elapsed_ms": elapsed,
+	})
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(BatchResponse{
+		Root:      root,
+		BatchID:   fmt.Sprintf("batch_%d", time.Now().UnixNano()),
+		Timestamp: time.Now().Unix(),
+	})
 }
 
-var globalLimiter *RateLimiter
+func handleMetrics(w http.ResponseWriter, r *http.Request) {
+	stats.lock.Lock()
+	uptime := int64(time.Since(stats.startTime).Seconds())
+	stats.lock.Unlock()
 
-func NewRateLimiter(rps float64, burst int) *RateLimiter {
-	return &RateLimiter{
-		limiter: rate.NewLimiter(rate.Limit(rps), burst),
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4")
+	fmt.Fprintf(w, "# HELP brixascaler_total_batches Total batches processed\n")
+	fmt.Fprintf(w, "# TYPE brixascaler_total_batches counter\n")
+	fmt.Fprintf(w, "brixascaler_total_batches %d\n", stats.totalBatches)
+	fmt.Fprintf(w, "# HELP brixascaler_total_txs Total transactions processed\n")
+	fmt.Fprintf(w, "# TYPE brixascaler_total_txs counter\n")
+	fmt.Fprintf(w, "brixascaler_total_txs %d\n", stats.totalTxs)
+	fmt.Fprintf(w, "# HELP brixascaler_uptime_seconds Server uptime in seconds\n")
+	fmt.Fprintf(w, "# TYPE brixascaler_uptime_seconds gauge\n")
+	fmt.Fprintf(w, "brixascaler_uptime_seconds %d\n", uptime)
+}
+
+// ═══════════════════════════════════════════════════════════════
+// NONCE TRACKING
+// ═══════════════════════════════════════════════════════════════
+
+type NonceTracker struct {
+	nonces map[string]uint64
+	mu     sync.Mutex
+}
+
+func NewNonceTracker() *NonceTracker {
+	return &NonceTracker{
+		nonces: make(map[string]uint64),
 	}
 }
 
-func (rl *RateLimiter) Allow() bool {
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
-	allowed := rl.limiter.Allow()
-	if allowed {
-		rl.requests++
+func (nt *NonceTracker) GetNonce(address string) uint64 {
+	nt.mu.Lock()
+	defer nt.mu.Unlock()
+	return nt.nonces[address]
+}
+
+func (nt *NonceTracker) SetNonce(address string, nonce uint64) {
+	nt.mu.Lock()
+	defer nt.mu.Unlock()
+	nt.nonces[address] = nonce
+}
+
+func (nt *NonceTracker) IncrementNonce(address string) uint64 {
+	nt.mu.Lock()
+	defer nt.mu.Unlock()
+	nt.nonces[address]++
+	return nt.nonces[address]
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SERVER SETUP WITH SECURITY MIDDLEWARE
+// ═══════════════════════════════════════════════════════════════
+
+func SetupServer() *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/batch", handleBatch)
+	mux.HandleFunc("/health", handleHealth)
+	mux.HandleFunc("/benchmark", handleBenchmark)
+	if config.MetricsEnabled {
+		mux.HandleFunc("/metrics", handleMetrics)
 	}
-	return allowed
+	return mux
 }
 
-func (rl *RateLimiter) GetRequests() uint64 {
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
-	return rl.requests
+// Secure middleware chain
+func secureMiddleware(next http.Handler) http.Handler {
+	// Rate limiting
+	handler := rateLimitMiddleware(next)
+	// Request size limit
+	handler = requestSizeMiddleware(secConfig.MaxRequestSize)(handler)
+	// CORS
+	handler = corsMiddleware(secConfig.CORSOrigins)(handler)
+	// API Key (if configured)
+	if secConfig.APIKey != "" {
+		handler = apiKeyMiddleware(secConfig.APIKey)(handler)
+	}
+	return handler
 }
 
-func init() {
-	globalLimiter = NewRateLimiter(100, 200)
-}
-
-func handleRateLimit(next http.Handler) http.Handler {
+func rateLimitMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !globalLimiter.Allow() {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusTooManyRequests)
-			fmt.Fprintf(w, `{"error":"rate limit exceeded","retry_after":1}`)
+		if !rateLimiter.Allow() {
+			http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
 }
 
-// SetupServer creates the HTTP muxer (extracted for testability)
-func SetupServer() *http.ServeMux {
-	mux := http.NewServeMux()
-	
-	mux.HandleFunc("/batch", func(w http.ResponseWriter, r *http.Request) {
-		if !globalLimiter.Allow() {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusTooManyRequests)
-			fmt.Fprintf(w, `{"error":"rate limit exceeded","retry_after":1}`)
-			return
-		}
-		handleBatch(w, r)
-	})
-	mux.HandleFunc("/health", handleHealth)
-	mux.HandleFunc("/benchmark", handleBenchmark)
-
-	// Metrics endpoint
-	cfg := LoadConfig()
-	if cfg.MetricsEnabled {
-		mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "text/plain")
-			fmt.Fprintf(w, "# HELP brixa_scaler_total_txs Total transactions processed\n")
-			fmt.Fprintf(w, "# TYPE brixa_scaler_total_txs counter\n")
-			fmt.Fprintf(w, "brixa_scaler_total_txs %d\n", stats.totalTxs)
-			fmt.Fprintf(w, "# HELP brixa_scaler_total_batches Total batches created\n")
-			fmt.Fprintf(w, "# TYPE brixa_scaler_total_batches counter\n")
-			fmt.Fprintf(w, "brixa_scaler_total_batches %d\n", stats.totalBatches)
+func requestSizeMiddleware(maxSize int64) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.ContentLength > maxSize {
+				http.Error(w, "Request too large", http.StatusRequestEntityTooLarge)
+				return
+			}
+			r.Body = http.MaxBytesReader(w, r.Body, maxSize)
+			next.ServeHTTP(w, r)
 		})
 	}
-	
-	return mux
 }
 
-// RunStartup runs startup sequence (extracted for testability)
-func RunStartup(cfg Config) {
-	logger.Info("brixa-scaler starting", map[string]interface{}{
-		"version":        "1.0.0",
-		"rpc_port":       cfg.RPCPort,
-		"metrics_port":   cfg.MetricsPort,
-		"demo_mode":      cfg.DemoMode,
-	})
+func corsMiddleware(origins []string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if len(origins) > 0 {
+				origin := r.Header.Get("Origin")
+				for _, allowed := range origins {
+					if origin == allowed || allowed == "*" {
+						w.Header().Set("Access-Control-Allow-Origin", origin)
+						w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+						w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-API-Key")
+						break
+					}
+				}
+			}
+			if r.Method == "OPTIONS" {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
 
-	if cfg.DemoMode {
+func apiKeyMiddleware(apiKey string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			provided := r.Header.Get("X-API-Key")
+			if provided == "" {
+				provided = r.URL.Query().Get("api_key")
+			}
+			if provided != apiKey {
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SERVER CONTROL
+// ═══════════════════════════════════════════════════════════════
+
+func PrintRoutes() {
+	fmt.Println("  GET  /batch    - Submit transaction batch (POST JSON)")
+	fmt.Println("  GET  /health   - Server health & stats")
+	fmt.Println("  GET  /benchmark - Quick TPS benchmark")
+	fmt.Println("  GET  /metrics  - Prometheus metrics")
+}
+
+func StartServer(port int) error {
+	mux := SetupServer()
+	handler := secureMiddleware(mux)
+	return http.ListenAndServe(fmt.Sprintf(":%d", port), handler)
+}
+
+func RunMain() {
+	logger.Info("brixa-scaler starting", nil)
+
+	if config.DemoMode {
+		logger.Warn("DEMO_MODE enabled - no real transactions", map[string]interface{}{
+			"warning": "DEMO_MODE is enabled - no real transactions",
+		})
 		fmt.Printf("\n⚠️  WARNING: DEMO_MODE is enabled!\n")
 		fmt.Printf("   No real transactions will be processed.\n")
 		fmt.Printf("   Set DEMO_MODE=false to enable real transactions\n\n")
 	}
-}
-
-// SetupGracefulShutdown sets up signal handling (extracted for testability)
-func SetupGracefulShutdown() chan os.Signal {
-	shutdownChan := make(chan os.Signal, 1)
-	signal.Notify(shutdownChan, syscall.SIGINT, syscall.SIGTERM)
-	return shutdownChan
-}
-
-// StartMetricsServer starts the metrics HTTP server (extracted for testability)
-func StartMetricsServer(port int) {
-	if port > 0 {
-		go func() {
-			logger.Info("metrics server started", map[string]interface{}{
-				"port": port,
-			})
-			http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
-		}()
-	}
-}
-
-// StartServer starts the main HTTP server (extracted for testability)
-// Note: In tests, use httptest.Server instead to avoid blocking
-func StartServer(port int) error {
-	mux := SetupServer()
-	fmt.Printf("\n🚀 BrixaScaler running on http://localhost:%d\n", port)
-	return http.ListenAndServe(fmt.Sprintf(":%d", port), mux)
-}
-
-// PrintRoutes prints the available routes (extracted for testability)
-func PrintRoutes() {
-	fmt.Printf("  GET  /batch    - Submit transaction batch (POST JSON)\n")
-	fmt.Printf("  GET  /health   - Server health & stats\n")
-	fmt.Printf("  GET  /benchmark - Quick TPS benchmark\n")
-	fmt.Printf("  GET  /metrics  - Prometheus metrics\n")
-}
-
-// RunMain is the main logic extracted for testing
-func RunMain() {
-	cfg := LoadConfig()
-	RunStartup(cfg)
-	
-	rpcPort := cfg.RPCPort
-	metricsPort := cfg.MetricsPort
-
-	// Graceful shutdown
-	shutdownChan := SetupGracefulShutdown()
-
-	go func() {
-		<-shutdownChan
-		logger.Info("shutdown signal received, flushing pending batches", map[string]interface{}{})
-
-		stats.lock.Lock()
-		pendingBatches := stats.pendingBatches
-		stats.lock.Unlock()
-
-		if pendingBatches > 0 {
-			logger.Info("flushing pending batches", map[string]interface{}{
-				"pending_batches": pendingBatches,
-			})
-		}
-		os.Exit(0)
-	}()
-
-	// Start metrics server
-	StartMetricsServer(metricsPort)
 
 	PrintRoutes()
+	fmt.Printf("🚀 BrixaScaler running on http://localhost:%d\n", config.RPCPort)
 
-	log.Fatal(StartServer(rpcPort))
+	if config.MetricsEnabled {
+		go func() {
+			logger.Info("metrics server started", nil)
+			log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", config.MetricsPort), http.HandlerFunc(handleMetrics)))
+		}()
+	}
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	<-sigChan
 }
 
 func main() {
 	RunMain()
-}
-// ═══════════════════════════════════════════════════════════════
-// MULTI-NODE COORDINATION - Cluster Management (Priority 5)
-// ═══════════════════════════════════════════════════════════════
-
-type Node struct {
-	ID        string    `json:"id"`
-	Address   string    `json:"address"`
-	Port      int       `json:"port"`
-	Status    string    `json:"status"` // "active", "joining", "leaving"
-	LastSeen  time.Time `json:"last_seen"`
-	Weight    int       `json:"weight"` // for leader election
-}
-
-type Cluster struct {
-	Nodes map[string]*Node
-	mu    sync.RWMutex
-	Self  string
-}
-
-var cluster *Cluster
-
-func (c *Cluster) AddNode(node *Node) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	node.LastSeen = time.Now()
-	node.Status = "active"
-	c.Nodes[node.ID] = node
-}
-
-func (c *Cluster) RemoveNode(id string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if node, ok := c.Nodes[id]; ok {
-		node.Status = "leaving"
-	}
-}
-
-func (c *Cluster) GetLeader() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	
-	var leader *Node
-	for _, n := range c.Nodes {
-		if n.Status != "active" {
-			continue
-		}
-		if leader == nil || n.Weight > leader.Weight {
-			leader = n
-		}
-	}
-	
-	if leader != nil {
-		return leader.ID
-	}
-	return ""
-}
-
-func (c *Cluster) ListNodes() []*Node {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	
-	result := make([]*Node, 0, len(c.Nodes))
-	for _, n := range c.Nodes {
-		result = append(result, n)
-	}
-	return result
-}
-
-func initCluster(selfID, addr string, port int) {
-	cluster = &Cluster{
-		Nodes: make(map[string]*Node),
-		Self:  selfID,
-	}
-	cluster.AddNode(&Node{
-		ID:       selfID,
-		Address:  addr,
-		Port:     port,
-		Status:   "active",
-		LastSeen: time.Now(),
-		Weight:   100,
-	})
-}
-
-// Health check for cluster
-func handleClusterHealth(w http.ResponseWriter, r *http.Request) {
-	cluster.mu.RLock()
-	nodeCount := len(cluster.Nodes)
-	leader := cluster.GetLeader()
-	cluster.mu.RUnlock()
-	
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"node_count":    nodeCount,
-		"leader":        leader,
-		"self":          cluster.Self,
-		"nodes":         cluster.ListNodes(),
-	})
-}
-
-// ═══════════════════════════════════════════════════════════════
-// GAS OPTIMIZATION - Batch Compression & Calldata Savings
-// ═══════════════════════════════════════════════════════════════
-
-// GasCost calculates L1 calldata cost for a batch
-func GasCost(txCount int, numShards int) uint64 {
-	// Each transaction: ~200 bytes compressed
-	// L1 calldata: 16 gas per non-zero byte, 4 per zero byte
-	avgTxSize := 200
-	zeroBytes := avgTxSize / 3 // ~1/3 zeros
-	
-	nonZeroGas := uint64((avgTxSize - zeroBytes) * 16)
-	zeroGas := uint64(zeroBytes * 4)
-	perTxGas := nonZeroGas + zeroGas
-	
-	// With sharding: combine roots
-	rootGas := uint64(32 * 16) // 32 bytes per root
-	
-	total := uint64(txCount)*perTxGas + uint64(numShards)*rootGas
-	return total
-}
-
-// CompressBatch reduces transaction data for L1
-func CompressBatch(txs []Transaction) []byte {
-	// Simple RLE-like compression for demo
-	var result []byte
-	
-	for _, tx := range txs {
-		result = append(result, last6(tx.From)...)
-		result = append(result, last6(tx.To)...)
-		nonce := make([]byte, 8)
-		binary.LittleEndian.PutUint64(nonce, tx.Nonce)
-		result = append(result, nonce...)
-	}
-	
-	return result
-}
-
-// CompressionRatio returns compression efficiency
-func CompressionRatio(original, compressed int) float64 {
-	if original == 0 {
-		return 0
-	}
-	return float64(compressed) / float64(original)
-}
-
-// BatchInfo holds compressed batch metadata
-type BatchInfo struct {
-	TxCount        int     `json:"tx_count"`
-	CompressedSize int     `json:"compressed_size"`
-	OriginalSize   int     `json:"original_size"`
-	GasCost        uint64  `json:"gas_cost"`
-	Ratio          float64 `json:"ratio"`
-}
-
-// NewBatchInfo creates batch metadata
-func NewBatchInfo(txs []Transaction, numShards int) *BatchInfo {
-	original := estimateSize(txs)
-	compressed := len(CompressBatch(txs))
-	ratio := CompressionRatio(original, compressed)
-	
-	return &BatchInfo{
-		TxCount:        len(txs),
-		CompressedSize: compressed,
-		OriginalSize:   original,
-		GasCost:        GasCost(len(txs), numShards),
-		Ratio:          ratio,
-	}
-}
-
-func estimateSize(txs []Transaction) int {
-	size := 0
-	for _, tx := range txs {
-		size += len(tx.From) + len(tx.To) + 8 + 8
-		if tx.Data != "" {
-			size += len(tx.Data)
-		}
-	}
-	return size
-}
-
-// OptimizedBatch is a gas-optimized batch format
-type OptimizedBatch struct {
-	Version       uint8    `json:"version"`
-	Timestamp     uint64   `json:"timestamp"`
-	ShardRoots    []string `json:"shard_roots"`
-	CompressedTxs []byte   `json:"compressed_txs"`
-	Signature     string   `json:"signature"`
-}
-
-// Encode compresses transactions for L1
-func (b *OptimizedBatch) Encode(txs []Transaction) {
-	b.Version = 1
-	b.Timestamp = uint64(time.Now().Unix())
-	b.CompressedTxs = CompressBatch(txs)
-}
-
-// Decode decompresses transactions from L1
-func (b *OptimizedBatch) Decode(txs *[]Transaction) error {
-	return nil
-}
-
-// VerifyBatch validates batch integrity
-func VerifyBatch(txs []Transaction, root string) bool {
-	computed, _ := ProcessBatch(txs, 4)
-	return computed == root
-}
-
-func last6(s string) string {
-	if len(s) < 6 {
-		return s
-	}
-	return s[len(s)-6:]
 }
