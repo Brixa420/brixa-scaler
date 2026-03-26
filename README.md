@@ -1,5 +1,15 @@
 # BrixaScaler
 
+**⚠️ DEMO MODE ENABLED BY DEFAULT ⚠️**
+
+> By default, the server runs in **demo mode**. No real transactions are processed. Set `DEMO_MODE=false` to enable real transaction processing.
+
+```bash
+DEMO_MODE=false ./brixascaler
+```
+
+---
+
 **High-throughput transaction batching with ZK proofs for AI agents and blockchain games.**
 
 BrixaScaler lets thousands of AI agents or game players act instantly off-chain, then settle securely on-chain with cryptographic proof. No fifty thousand dollar gas bills. No twelve second waits.
@@ -113,15 +123,3 @@ Player/Agent Action
 ## License
 
 MIT
-
----
-
-## Demo Mode
-
-By default, the server runs in demo mode. Set `DEMO_MODE=false` to enable real transaction processing:
-
-```bash
-DEMO_MODE=false ./brixascaler
-```
-
-Demo mode processes batches for benchmarking but does not send real transactions to settlement chains.
