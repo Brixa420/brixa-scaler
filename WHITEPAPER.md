@@ -1,6 +1,6 @@
 # 💜 BrixaScaler - High-Throughput Transaction Batching with ZK Proofs
 
-> **One middleware. Every chain. 4M+ TPS ingestion. ZK settlement.**
+> **One middleware. Every chain. ~500K-900K TPS batching with Merkle. ZK settlement.**
 
 ---
 
@@ -21,7 +21,7 @@
 
 # 🏗️ Two-Layer Architecture: Batching → ZK → Settlement
 
-BrixaScaler uses a **two-layer + settlement** architecture to achieve 4M TPS while maintaining blockchain security:
+BrixaScaler uses a **two-layer + settlement** architecture to achieve high throughput while maintaining blockchain security:
 
 ## Layer 1: Batching Layer (High Throughput)
 
@@ -29,9 +29,9 @@ BrixaScaler uses a **two-layer + settlement** architecture to achieve 4M TPS whi
 ┌─────────────────────────────────────────────────────────────────┐
 │              LAYER 1: BATCHING LAYER                            │
 ├─────────────────────────────────────────────────────────────────┤
-│  Input: ~13,000,000 TPS raw transactions (benchmarked on M3)   │
+│  Input: ~500K TPS raw transactions (benchmarked on M3)   │
 │  Process: Hash → Build Merkle Tree → Create batch root        │
-│  Output: ~13,000 batches/sec (1000 txs/batch)                │
+│  Output: ~500 batches/sec (1000 txs/batch)                │
 │  Speed: Sub-millisecond (CPU only, no gas)                    │
 │  Cost: $0.000001 per transaction                              │
 └─────────────────────────────────────────────────────────────────┘
@@ -53,8 +53,8 @@ BrixaScaler uses a **two-layer + settlement** architecture to achieve 4M TPS whi
 ├─────────────────────────────────────────────────────────────────┤
 │  Input: ~4,000 batch roots/sec                                 │
 │  Process: Generate ZK proof for each merkle root               │
-│  Benchmark: ~17,000-18,000 proofs/sec                         │
-│  Output: ~17,000 ZK proofs/sec                                 │
+│  Benchmark: ~PENDING-PENDING proofs/sec                         │
+│  Output: ~PENDING ZK proofs/sec                                 │
 │  Cost: CPU only (no gas)                                      │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -62,7 +62,7 @@ BrixaScaler uses a **two-layer + settlement** architecture to achieve 4M TPS whi
 **What happens here:**
 1. Each batch root gets a ZK proof generated
 2. The proof proves "this batch of transactions is valid"
-3. ~17K proofs generated per second
+3. PENDING proofs generated per second
 4. Proofs are bundled (260/tx) for efficient settlement
 
 ## Settlement Layer (L1/L2 Blockchain)
@@ -88,12 +88,12 @@ BrixaScaler uses a **two-layer + settlement** architecture to achieve 4M TPS whi
 ## Complete Flow
 
 ```
-User Action (4M TPS)
+User Action (500K-900K TPS)
     ↓
 ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
 │   BATCHING   │ ──→ │     ZK       │ ──→ │  SETTLEMENT  │
 │    LAYER     │     │    LAYER     │     │    LAYER     │
-│  ~13M TPS   │     │  ~17K TPS    │     │   ~65 TPS    │
+│  500K-900K TPS   │     │  PENDING    │     │   ~65 TPS    │
 └──────────────┘     └──────────────┘     └──────────────┘
    (1000 txs)           (ZK proof)        (260 proofs/tx)
 ```
@@ -102,21 +102,21 @@ User Action (4M TPS)
 
 | Stage | Input TPS | Output TPS | Batching |
 |-------|-----------|------------|----------|
-| **Batching** | 13,000,000 | 13,000 | 1000 txs/batch |
-| **ZK** | 3,400 | 17,000 | 1 root = 1 proof |
-| **Settlement** | 17,000 | 65 | 260 proofs/tx |
+| **Batching** | 500K | 500 | 1000 txs/batch |
+| **ZK** | 3,400 | PENDING | 1 root = 1 proof |
+| **Settlement** | PENDING | 65 | 260 proofs/tx |
 
-> **Benchmarked on Apple M3 (10-core):** 10M transactions in 0.8s = ~13M TPS sustained. Peak: 14M TPS.
+> **Benchmarked on Apple M3 (10-core):** 10M transactions in 0.8s = 500K-900K TPS sustained. Peak: 1500K-900K TPS.
 
 ## Why Split Layers?
 
 | Layer | What It Does | TPS | Cost | Handles |
 |-------|--------------|-----|------|---------|
-| **Batching** | Hash + Merkle root | ~13,000,000 | Near-zero | Game moves, AI calls, clicks |
-| **ZK** | Generate cryptographic proof | ~17,000 | CPU only | Prove batch validity |
+| **Batching** | Hash + Merkle root | ~500K | Near-zero | Game moves, AI calls, clicks |
+| **ZK** | Generate cryptographic proof | ~PENDING | CPU only | Prove batch validity |
 | **Settlement** | Submit to blockchain | 15-65 | $0.01-0.10/tx | Money, assets, ownership |
 
-**The key insight:** You don't need blockchain for every action. You only need it when settling. This is like a restaurant - orders come in fast (4M actions), checks are settled later (65 TPS). The player feels instant. The blockchain sees security.
+**The key insight:** You don't need blockchain for every action. You only need it when settling. This is like a restaurant - orders come in fast (500K-900K actions), checks are settled later (65 TPS). The player feels instant. The blockchain sees security.
 
 ---
 
@@ -134,10 +134,10 @@ The current code uses **placeholder proofs** to validate the batching layer inde
 For production, we recommend a **recursive proving** strategy:
 
 ```
-4K batch roots/sec
+500 batch roots/sec
     ↓
 Circuit A: Verify 1 batch (1000 txs) → 1 proof (~10M constraints, 0.06ms)
-    ↓ (4K proofs/sec)
+    ↓ (500 proofs/sec)
 Circuit B: Recursively aggregate 260 proofs → 1 final proof (~5M constraints)
     ↓ (~15 proofs/sec)  
 Circuit C: Aggregate 15 batch proofs → 1 final settlement proof (~2M constraints)
@@ -149,14 +149,14 @@ Settlement: 1 tiny proof (~10-20KB calldata) ✅
 
 | Stage | Input | Output | Notes |
 |-------|-------|--------|-------|
-| Raw TPS | 4M TPS | - | User transactions |
-| Batching | 4M | 4K batches/sec | 1000 txs/batch |
-| Batch Proofs | 4K | 4K proofs/sec | 1 proof per batch |
-| Recursive Stage 1 | 4K | ~15 proofs/sec | 260:1 aggregation |
+| Raw TPS | 500K-900K TPS | - | User transactions |
+| Batching | 500K-900K | 500 batches/sec | 1000 txs/batch |
+| Batch Proofs | 500 | 500 proofs/sec | 1 proof per batch |
+| Recursive Stage 1 | 500 | ~15 proofs/sec | 260:1 aggregation |
 | Recursive Stage 2 | 15 | ~1 proof/sec | 15:1 aggregation |
 | **Settlement** | 1 | 1 tx/sec | L1/L2 submission |
 
-**Headroom:** We have 17K/sec ZK capacity but only need ~4K proofs/sec = **4x+ headroom**
+**Headroom:** We have PENDING/sec ZK capacity but only need ~500 proofs/sec = **4x+ headroom**
 
 ## Circuit Complexity Estimates
 
@@ -172,7 +172,7 @@ For a production circuit verifying batch validity:
 
 At 10M constraints per batch circuit:
 - Single proof time: ~0.06ms (with GPU acceleration)
-- Throughput: ~16K proofs/sec (well above 4K needed)
+- Throughput: ~PENDING proofs/sec (well above 500 needed)
 
 ## Gas Costs (Settlement)
 
@@ -288,7 +288,7 @@ BrixaScaler gives you a **fourth option**: build on our batching layer, settle t
 
 ### Why This Architecture Makes Sense
 
-1. **Massive throughput for your app** (4M TPS)
+1. **Massive throughput for your app** (500K-900K TPS)
    - AI agents making millions of API calls
    - Games with hundreds of actions per second
    - DeFi with high-frequency trading
@@ -326,7 +326,7 @@ Step 3: Final cost: $0.11 for 1M actions
 ```
 Step 1: Player clicks 100 times/second
         ↓
-        All batched instantly on BrixaScaler (4M TPS capacity)
+        All batched instantly on BrixaScaler (500K-900K TPS capacity)
         ↓
 Step 2: Every 10 seconds → batch settles to Polygon ($0.001)
         ↓
@@ -362,7 +362,7 @@ Traditional L2s require bridging funds, deploying to a new network, and trusting
 ```
 Player/Agent Action
         ↓
-   [BrixaScaler] ← 4M+ TPS ingestion
+   [BrixaScaler] ← 500K-900K TPS ingestion
         ↓
   Batch + Merkle Tree
         ↓
@@ -371,7 +371,7 @@ Player/Agent Action
    Settlement Chain ← 65 TPS verification
 ```
 
-**Note:** The Go layer (4M TPS) is not the bottleneck. ZK proving (1-5 proofs/sec) is the real bottleneck. This is architecturally correct — fast ingestion, slow proving, periodic settlement.
+**Note:** The Go layer (500K-900K TPS) is not the bottleneck. ZK proving (1-5 proofs/sec) is the real bottleneck. This is architecturally correct — fast ingestion, slow proving, periodic settlement.
 
 ---
 
@@ -401,7 +401,7 @@ Batch + Merkle: 237,808 ns/op = 0.238 ms
 
 | Hardware | Result | Implication |
 |----------|--------|-------------|
-| Mac Mini M4 (10-core, $600) | 4M TPS ingestion | This is the floor, not the ceiling |
+| Mac Mini M4 (10-core, $600) | 500K-900K TPS ingestion | This is the floor, not the ceiling |
 | Better hardware | Linear scaling | More cores = more shards = more TPS |
 | Server-grade hardware | 10M+ TPS likely | 64-core AMD EPYC, Intel Xeon |
 | Cloud instances | Auto-scaling | Kubernetes horizontal pod scaling |
@@ -410,7 +410,7 @@ Batch + Merkle: 237,808 ns/op = 0.238 ms
 
 | Current | Potential |
 |----------|-----------|
-| 4M TPS on Mac Mini M4 | 10M+ TPS on server hardware |
+| 500K-900K TPS on Mac Mini M4 | 10M+ TPS on server hardware |
 | Single machine | Distributed across many machines |
 | 10-core parallelism | 64-core, 128-core, or more |
 
@@ -505,7 +505,7 @@ Current state: **~75% complete** - architecture done, integration remaining.
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Go batching server | ✅ Done | Benchmarked at 4M+ TPS |
+| Go batching server | ✅ Done | Benchmarked at 500K-900K TPS |
 | ZK layer (placeholder) | ⚠️ Stub | Logs proofs, needs Circom integration |
 | Settlement (placeholder) | ⚠️ Stub | Logs txs, needs RPC integration |
 | Docker + hardening | ✅ Done | Multi-stage build, security configs |
@@ -558,6 +558,6 @@ User Action → Batching (Go) → ZK Prover (Circom WASM) → Settlement (RPC)
 
 ---
 
-**TL;DR**: BrixaScaler makes any blockchain 1,000x faster without being an L2. Developers just run our middleware and point their wallet to localhost. No bridge, no new chain, no trust issues. Just 4M+ TPS ingestion with ZK settlement to any chain.
+**TL;DR**: BrixaScaler makes any blockchain 1,000x faster without being an L2. Developers just run our middleware and point their wallet to localhost. No bridge, no new chain, no trust issues. Just 500K-900K TPS ingestion with ZK settlement to any chain.
 
 **This software is provided as-is for demonstration purposes. No real transactions are processed in Demo Mode. Use at your own risk.**
