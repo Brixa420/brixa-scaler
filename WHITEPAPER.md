@@ -19,6 +19,67 @@
 
 ---
 
+# 🏗️ Architecture: Two Layers, Two Speeds
+
+BrixaScaler is designed as a **Layer 3/4 batching infrastructure**. We separate the fast ingestion from the secure settlement.
+
+## Layer 1: Batching Layer (4.2M+ TPS)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                 BATCHING LAYER (L3/L4)                        │
+├─────────────────────────────────────────────────────────────────┤
+│  Your App/API → Hash Transactions → Batch in Memory           │
+│                                                                 │
+│  TPS: 4,200,000+                                              │
+│  Latency: <1 millisecond                                      │
+│  Cost: $0.000001 per transaction (CPU only)                  │
+│  Security: Receipts (not yet on-chain)                        │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**What happens here:**
+1. Your app sends transactions to BrixaScaler
+2. Each transaction is SHA256 hashed (parallel, multi-core)
+3. Transactions are batched in memory
+4. A "receipt" is returned immediately (not yet on-chain)
+5. No gas, no wait, no blockchain contact
+
+## Layer 2: ZK Settlement Layer
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                   ZK SETTLEMENT LAYER                          │
+├─────────────────────────────────────────────────────────────────┤
+│  Batched Hashes → Merkle Tree → ZK Proof → L1/L2             │
+│                                                                 │
+│  TPS: ~17,000 (limited by merkle + proving)                   │
+│  Latency: 30-300 seconds                                      │
+│  Cost: $0.01-0.10 per transaction                             │
+│  Security: ZK proof + on-chain verification                   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**What happens here:**
+1. Every N batches (or time window), settlement triggers
+2. Merkle tree built from batch hashes (takes seconds)
+3. ZK circuit generates proof "this batch is valid"
+4. Proof submitted to L1/L2 (Ethereum, Arbitrum, etc.)
+5. Transactions are now FINAL on the blockchain
+
+## Why Two Layers?
+
+| Metric | Batching Layer | ZK Settlement |
+|--------|---------------|---------------|
+| **TPS** | 4,200,000+ | ~17,000 |
+| **Latency** | <1ms | 30-300s |
+| **Cost/tx** | $0.000001 | $0.01-0.10 |
+| **Use Case** | Real-time actions (games, AI) | Final settlement |
+
+**The key insight:** You don't need ZK proofs for every player click. You only need them when settling to L1/L2. This is like a restaurant - orders come in fast, checks are settled later.
+
+---
+
 # 🎯 The Problem
 
 ## Crypto Has a Scaling Problem
@@ -101,6 +162,67 @@ The user gets **instant feedback**. The chain gets **one transaction**. Everyone
 - **Compression** — One on-chain transaction = thousands off-chain
 - **Integrity** — Cryptographic proof the batch was valid
 - **Any Chain** — Settle to Ethereum, Polygon, Arbitrum, etc.
+
+---
+
+# 🎯 Why Build on BrixaScaler's Batching Layer
+
+## The Answer: Web2 Speeds, Web3 Security
+
+Traditional blockchain development forces a choice:
+- **L1**: Secure but slow (~15 TPS)
+- **L2**: Faster but complex (bridges, new networks)
+- **Centralized**: Fast but no blockchain benefits
+
+BrixaScaler gives you a **fourth option**: build on our batching layer, settle to any L1/L2.
+
+### Why This Architecture Makes Sense
+
+1. **Massive throughput for your app** (4.2M TPS)
+   - AI agents making millions of API calls
+   - Games with hundreds of actions per second
+   - DeFi with high-frequency trading
+
+2. **Dramatically cheaper costs**
+   - Ingest at $0.000001/tx (batching layer)
+   - Settle at $0.01/tx (ZK to L2/L1)
+   - Example: 1M transactions = $0.11 total vs $500+ on L1
+
+3. **Real blockchain ownership for users**
+   - Periodic settlement to L1/L2 gives users real on-chain assets
+   - Not a sidechain or bridge - actual Ethereum/Polygon tokens
+   - ZK proofs verify everything was valid
+
+4. **No fragmentation**
+   - Single API for ingestion
+   - Settle to ANY chain (Ethereum, Polygon, Arbitrum, Base, etc.)
+   - Users don't need to bridge
+
+### Example: AI Agent Network
+
+```
+Step 1: Agent makes 1 million API calls
+        ↓
+        All batched locally on BrixaScaler ($0.001)
+        ↓
+Step 2: Every 10,000 calls → batch settles to Arbitrum ($0.10)
+        ↓
+Step 3: Final cost: $0.11 for 1M actions
+        Alternative: $500+ on Ethereum L1
+```
+
+### Example: Blockchain Game
+
+```
+Step 1: Player clicks 100 times/second
+        ↓
+        All batched instantly on BrixaScaler (4.2M TPS capacity)
+        ↓
+Step 2: Every 10 seconds → batch settles to Polygon ($0.001)
+        ↓
+Step 3: Player gets real on-chain NFT ownership
+        But gameplay feels instant (no wait!)
+```
 
 ---
 

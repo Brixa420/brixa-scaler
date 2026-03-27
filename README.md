@@ -44,6 +44,61 @@ The following features are **stubbed out or partially implemented** and need to 
 
 ---
 
+## 🏗️ Layered Architecture: Batching Layer vs ZK Settlement
+
+BrixaScaler is designed as a **Layer 3/4** batching infrastructure. Understanding the layers is critical for builders:
+
+### Layer 1: Ingestion/Batching Layer (This Software)
+- **Throughput:** 4.2+ million TPS
+- **What it does:** Hashes transactions in parallel, batches them in memory
+- **Speed:** Sub-millisecond latency
+- **Cost:** Near-zero (CPU only, no on-chain gas)
+- **Use case:** Your app builds HERE
+
+### Layer 2: ZK Proof Layer
+- **What it does:** Generates cryptographic proof that the batch is valid
+- **Speed:** Seconds to minutes (ZK circuit computation)
+- **Cost:** Higher (ZK proving infrastructure)
+- **When:** Runs periodically (every N batches or time window)
+
+### Why Split Layers?
+
+| Metric | Batching Layer | ZK Settlement |
+|--------|---------------|---------------|
+| TPS | 4,200,000+ | ~17,000 |
+| Latency | <1ms | 30-300s |
+| Cost per tx | $0.000001 | $0.01-0.10 |
+| Use case | Real-time actions | Final settlement |
+
+**The key insight:** You don't need ZK proofs for every action. You only need them when you settle. This is like a restaurant - orders come in fast (batching), checks are settled later (ZK).
+
+---
+
+## 🎯 Why Build on BrixaScaler's Batching Layer
+
+1. **Massive throughput** — 4.2M TPS handles AI agents, games, DeFi at Web2 speeds
+2. **Dramatically cheaper** — Ingest at $0.000001/tx, settle periodically at $0.01/tx
+3. **Settle to L2/L1** — Your users get real blockchain ownership on Ethereum, Arbitrum, Optimism, etc.
+4. **ZK verified** — No trusted intermediary - cryptographic proof of batch validity
+5. **No app-chain fragmentation** — Single batching layer, multiple settlement targets
+
+### Example: AI Agent Network
+```
+1. Agent makes 1 million API calls → $0.001 total (batching layer)
+2. Every 10,000 calls → batch settled to L2 → $0.10
+3. Result: 1M actions = $0.11 total vs $500+ on L1
+```
+
+### Example: Blockchain Game
+```
+1. Player clicks 100 times/second → all batched locally (4.2M TPS)
+2. Every 10 seconds → batch settles to Polygon → $0.001
+3. Player gets real on-chain ownership periodically
+4. Result: Instant gameplay + real assets = best of both worlds
+```
+
+---
+
 ## Quick Start
 
 **High-throughput transaction batching with ZK proofs for AI agents and blockchain games.**
