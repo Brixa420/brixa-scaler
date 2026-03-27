@@ -95,12 +95,25 @@ The Go layer is not the bottleneck. The bottleneck is ZK proving at one to five 
 
 ## Quick Start
 
+## Quick Start
+
 ```bash
+# Install dependencies
+npm install
+
+# Run Brixaroll (recommended, true off-chain)
+node integration/brixaroll.js --rpc https://your-rpc-url
+
+# OR run BrixaScaler (simple batching)
+node integration/brixa-scaler.js --rpc https://your-rpc-url
+
+# Go implementation (faster)
 cd integration/go
 go build -o brixascaler server.go
 ./brixascaler
 ```
 
+Server runs on `http://localhost:8080` by default.
 Server runs on `http://localhost:8080` by default.
 
 ### Endpoints
