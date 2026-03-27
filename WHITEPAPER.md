@@ -1,6 +1,6 @@
 # 💜 BrixaScaler - High-Throughput Transaction Batching with ZK Proofs
 
-> **One middleware. Every chain. Infinite TPS. Zero-Knowledge Privacy. ****
+> **One middleware. Every chain. Infinite TPS. Zero-Knowledge Privacy.**
 
 **"The VPN for TPS" - This is the code that makes crypto actually work.**
 
