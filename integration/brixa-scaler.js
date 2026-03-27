@@ -50,7 +50,7 @@ const { URL } = require('url');
 const CONFIG = {
   chain: process.env.CHAIN || 'auto',  // 'auto' = auto-detect from RPC
   rpcUrl: process.env.RPC_URL || null,  // User provides their own RPC URL
-  port: parseInt(process.env.PORT) || 8545,
+  port: parseInt(process.env.PORT) || 8080,
   batchSize: parseInt(process.env.BATCH_SIZE) || 1000,
   batchInterval: parseInt(process.env.BATCH_INTERVAL) || 1000,
   shards: parseInt(process.env.SHARDS) || 100,

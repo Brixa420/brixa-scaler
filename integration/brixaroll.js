@@ -43,7 +43,7 @@ const { URL } = require('url');
 
 const CONFIG = {
   rpcUrl: process.env.RPC_URL || null,
-  port: parseInt(process.env.PORT) || 8545,
+  port: parseInt(process.env.PORT) || 8080,
   batchSize: parseInt(process.env.BATCH_SIZE) || 1000,
   batchInterval: parseInt(process.env.BATCH_INTERVAL) || 1000,
   shards: parseInt(process.env.SHARDS) || 1000,       // DEFAULT 1000 SHARDS!
