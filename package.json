@@ -1,7 +1,7 @@
 {
   "name": "@brixa420/scaling-layer",
   "version": "1.0.0",
-  "description": "Brixa - VPN for TPS. Add infinite TPS to any blockchain.",
+  "description": "Brixa - 2.8M TPS Batching Layer - ZK Settlement.",
   "main": "integration/brixa-scaler.js",
   "types": "package/index.d.ts",
   "scripts": {
