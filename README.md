@@ -263,3 +263,21 @@ This software handles cryptographic operations and blockchain transactions. Secu
 |----------|-------------|
 | `SETTLEMENT_PRIVATE_KEY` | Private key for signing transactions |
 | `SETTLEMENT_RPC_URL` | Blockchain RPC URL |
+
+### Settlement
+| Variable | Description |
+|----------|-------------|
+| `SETTLEMENT_CHAIN_ID` | Chain ID (default: 1 for Ethereum) |
+| `SETTLEMENT_GAS_LIMIT` | Gas limit per transaction (default: 21000) |
+
+### Multi-Sig
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MULTISIG_ENABLED` | false | Enable multi-sig |
+| `MULTISIG_THRESHOLD` | 2 | Required approvals |
+| `MULTISIG_APPROVERS` | - | Comma-separated approver addresses |
+| `MULTISIG_HIGH_VALUE_THRESHOLD` | 10 ETH | Value requiring multi-sig |
+
+### Endpoints
+- `GET /audit` - Audit log
+- `GET /settlement` - Settlement state
