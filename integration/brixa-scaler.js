@@ -328,7 +328,7 @@ function createServer() {
     // GET = Dashboard
     if (req.method === 'GET') {
       const s = scaler.getStats();
-      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=UTF-8' });
       res.end(`
 <!DOCTYPE html>
 <html>

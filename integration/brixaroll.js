@@ -406,7 +406,7 @@ if (cluster.isMaster) {
   // Create dashboard server on master
   const server = http.createServer((req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Content-Type', 'text/html');
+    res.setHeader('Content-Type', 'text/html; charset=UTF-8');
     
     // Get stats from all workers
     let totalQueued = 0, totalProven = 0, totalSubmitted = 0;
