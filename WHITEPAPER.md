@@ -4,6 +4,9 @@
 
 ---
 
+> ⚠️ **For Developers:** This is pre-production software. ZK proof generation, actual RPC settlement, and hardware wallet signing are stubs/placeholders. See GitHub issues for implementation status.
+
+
 > ⚠️ **DEMO MODE ENABLED BY DEFAULT** — Transactions are logged but NOT sent to any blockchain!
 > 
 > To enable real transactions: `DEMO_MODE=false` plus valid `SETTLEMENT_PRIVATE_KEY` and `SETTLEMENT_RPC_URL`
