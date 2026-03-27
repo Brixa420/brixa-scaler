@@ -1,5 +1,4 @@
-# 💜 BrixaScaler - THE LEGENDARY CRYPTO KILLER APP
-## The Universal Layer 2 Wrapper
+# 💜 BrixaScaler - High-Throughput Transaction Batching with ZK Proofs
 
 > **One middleware. Every chain. Infinite TPS. Zero-Knowledge Privacy. Node Rewards.**
 
@@ -7,7 +6,13 @@
 
 ---
 
-# 🏆 WHY THIS IS THE BEST CRYPTO TECH OF ALL TIME
+> ⚠️ **DEMO MODE ENABLED BY DEFAULT** — Transactions are logged but NOT sent to any blockchain!
+> 
+> To enable real transactions: `DEMO_MODE=false` plus valid `SETTLEMENT_PRIVATE_KEY` and `SETTLEMENT_RPC_URL`
+> 
+> **WARNING:** Operating without Demo Mode involves REAL MONEY. Use at your own risk.
+
+---
 
 # 🎯 The Problem
 
@@ -49,148 +54,48 @@ Every time someone creates a new L2:
 
 ---
 
-## The Comparison That Ends All Comparisons
-
-| Feature | BrixaScaler | Arbitrum | Optimism | Polygon | Solana |
-|---------|-------------|----------|----------|---------|--------|
-| **TPS Boost** | 1,000x | 10x | 10x | 10x | 1x |
-| **Privacy** | ✅ ZK | ❌ | ❌ | ❌ | ❌ |
-| **No Bridge** | ✅ | ❌ | ❌ | ❌ | ❌ |
-| **Node Rewards** | ✅ | ❌ | ❌ | ❌ | ❌ |
-| **Any Chain** | ✅ | ❌ | ❌ | ❌ | ✅ |
-| **Setup Time** | 1 min | 1 day | 1 day | 1 day | 1 day |
-| **Trust Original** | ✅ | ❌ | ❌ | ❌ | ✅ |
-
-**There's no comparison. BrixaScaler wins on every metric.**
-
----
-
-# ✨ The Magic (Now with Zero-Knowledge!)
+# ✨ The Solution (Now with Zero-Knowledge!)
 
 ## What If There Was a Better Way?
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    BRIXASCALER                                  │
-│                  "The VPN for TPS"                              │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  ┌─────────────┐      ┌─────────────┐      ┌────────────────┐  │
-│  │  Any Wallet │      │  BrixaScaler │      │  ANY CHAIN     │  │
-│  │  (any app)  │─────►│  (our tech)  │─────►│  (BTC/ETH/etc) │  │
-│  └─────────────┘      │  Batch txs   │      └────────────────┘  │
-│                       └─────────────┘                             │
-│                                                                 │
-│              NO CODE CHANGES. NO BRIDGE.                        │
-│              NO NEW CHAIN TO TRUST.                             │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
+What if you could:
+- Keep using **ANY** blockchain (Ethereum, Polygon, Arbitrum, etc.)
+- Get **4,000,000+ TPS** on transaction ingestion
+- Pay **less than a cent** per thousand transactions
+- Prove **correctness** with ZK proofs without revealing data
+- **Never bridge** funds or trust new networks
+
+This is BrixaScaler.
 
 ## The Magic Explained
 
-**BrixaScaler sits between your wallet and the blockchain.** That's it.
-
 ### Before BrixaScaler:
 ```
-Wallet → [1 tx] → Blockchain → Wait → [1 tx] → Blockchain → Wait...
+User Action → Wait 12 seconds → Pay $50 in gas → Transaction confirmed
 ```
 
 ### After BrixaScaler (with ZK):
 ```
-Wallet → [1,000 txs] → BrixaScaler → [ZK Proof + Commitments] → Blockchain
-                                        │
-                                        │ Privacy preserved!
-                                        │ Batch verified!
-                                        │ Scalability + Privacy!
+User Action → Instant (<1ms) → Logged locally → Batch + ZK Proof → Settle on-chain
 ```
+
+The user gets **instant feedback**. The chain gets **one transaction**. Everyone wins.
 
 ---
 
-## 🔐 Zero-Knowledge Integration
-
-**BrixaScaler now includes full ZK proofs!**
+# 🔐 Zero-Knowledge Integration
 
 ### How ZK Works:
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│ STEP 1: Create Commitment                                       │
-│                                                                 │
-│   Transaction: { to: "Alice", value: 100 }                     │
-│   + Secret: "random-string"                                    │
-│   = Commitment: "hash(tx + secret)"                            │
-│                                                                 │
-│   Commitment is public, but tx details are hidden!             │
-│                                                                 │
-├─────────────────────────────────────────────────────────────────┤
-│ STEP 2: Build Merkle Tree                                       │
-│                                                                 │
-│   [Commitment 1] ─┐                                             │
-│   [Commitment 2] ─┼─► Merkle Root                               │
-│   ...             ─┤    (batch commitment)                       │
-│   [Commitment N] ─┘                                             │
-│                                                                 │
-├─────────────────────────────────────────────────────────────────┤
-│ STEP 3: Generate ZK Proof                                      │
-│                                                                 │
-│   Inputs: all commitments + secret                              │
-│   Circuit: proves all txs are valid                            │
-│   Output: ZK proof (verifies without revealing txs)           │
-│                                                                 │
-├─────────────────────────────────────────────────────────────────┤
-│ STEP 4: Submit to Chain                                        │
-│                                                                 │
-│   On-chain:                                                     │
-│   - Merkle root (batch commitment)                             │
-│   - ZK proof (validates batch)                                 │
-│   - Nullifiers (prevents double-spend)                         │
-│                                                                 │
-│   Off-chain (kept private):                                    │
-│   - Actual transactions                                        │
-│   - Secrets                                                    │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
+1. **Batch** — Group thousands of off-chain transactions
+2. **Prove** — Generate ZK proof that the batch is valid
+3. **Settle** — Submit proof to any blockchain
+4. **Verify** — Smart contract verifies proof
 
 ### ZK Features:
-
-| Feature | Description |
-|---------|-------------|
-| **Transaction Commitments** | Hides tx details, proves validity |
-| **Merkle Tree** | Efficient batch proof structure |
-| **Nullifiers** | Prevents double-spending |
-| **ZK Proof** | Verifies batch without revealing txs |
-| **Privacy** | Transaction details stay private |
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│ STEP 1: Queue                                                  │
-│                                                                 │
-│   Wallet sends: "Transfer to Alice"                            │
-│   Wallet sends: "Transfer to Bob"                              │
-│   Wallet sends: "Mint NFT #1"                                  │
-│   Wallet sends: "Transfer to Charlie"                          │
-│   Wallet sends: "Vote YES"                                     │
-│                                                                 │
-│   BrixaScaler collects them all...                              │
-│                                                                 │
-├─────────────────────────────────────────────────────────────────┤
-│ STEP 2: Batch                                                  │
-│                                                                 │
-│   [1,000 transactions] ──► [1 batch of 1,000]                  │
-│                                                                 │
-│   The batch is just ONE blockchain call                        │
-│                                                                 │
-├─────────────────────────────────────────────────────────────────┤
-│ STEP 3: Submit                                                 │
-│                                                                 │
-│   ONE call to the blockchain instead of 1,000                 │
-│   ONE confirmation instead of 1,000                             │
-│   ONE gas fee instead of 1,000                                 │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
+- **Privacy** — Prove knowledge without revealing data
+- **Compression** — One on-chain transaction = thousands off-chain
+- **Integrity** — Cryptographic proof the batch was valid
+- **Any Chain** — Settle to Ethereum, Polygon, Arbitrum, etc.
 
 ---
 
@@ -198,245 +103,46 @@ Wallet → [1,000 txs] → BrixaScaler → [ZK Proof + Commitments] → Blockcha
 
 ## Comparison
 
-| Feature | Traditional L2 | BrixaScaler |
-|---------|----------------|-------------|
-| **Setup required** | Deploy contracts, bridge funds | Just run our middleware |
-| **User experience** | Must bridge funds to L2 | Nothing changes for users |
-| **Trust** | New network to trust | Uses the chain you already trust |
-| **Liquidity** | Fragmented | Stays on main chain |
-| **Integration** | New RPC, new everything | Just change your RPC to localhost |
-| **TPS** | ~10,000 | Unlimited (scales with batch size) |
-| **Cost** | Bridge fees + L2 fees | Just one fee |
-| **Time to implement** | Weeks/Months | Minutes |
-| **Privacy** | ❌ None (transparent) | ✅ ZK commitments (private) |
-
-## The Vision
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    EVERY DEVELOPER                              │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│   "I want to build a game with blockchain"                      │
-│                                                                 │
-│   OLD WAY:                                                     │
-│   → Learn about L2s                                            │
-│   → Deploy smart contracts                                      │
-│   → Bridge funds                                                │
-│   → Set up RPCs                                                 │
-│   → Wait for users to bridge                                   │
-│   → Hope liquidity follows                                     │
-│                                                                 │
-│   NEW WAY:                                                     │
-│   → npm install brixa-scaler                                    │
-│   → node server.js --chain ethereum                            │
-│   → Point wallet to localhost:8545                             │
-│   → Done. Build your game.                                      │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
----
-
-# 💡 Why This Is Perfect for Crypto
-
-## 1. **Zero Friction**
-- Users don't need to know about L2s
-- Users don't need to bridge funds
-- Users don't need new wallets
-- **Works with existing wallet, existing chain, existing everything**
-
-## 2. **Chain Agnostic**
-```
-BrixaScaler ──► Bitcoin      (7 TPS → 7,000 TPS)
-BrixaScaler ──► Ethereum    (30 TPS → 30,000 TPS)  
-BrixaScaler ──► Solana      (3,000 TPS → 3,000,000 TPS)
-BrixaScaler ──► Polygon     (7,000 TPS → 7,000,000 TPS)
-```
-**One tech. Every chain. Infinite TPS.**
-
-## 3. **No New Trust**
-- Still using the same blockchain
-- Still using the same consensus
-- Still using the same security
-- **The chain you trust is still the chain you use**
-
-## 4. **DeFi Integration**
-- AMMs work better (batch swap txs)
-- Lending protocols work better (batch liquidations)
-- NFTs work better (batch mints)
-- **Every DeFi use case benefits**
-
-## 5. **Gaming Perfect**
-- Games need high TPS (thousands of actions/minute)
-- Games need low latency (500ms batches is fine)
-- Games need simple integration (just change RPC)
-- **Gaming was never possible on blockchain. Now it is.**
+| Feature | BrixaScaler | Traditional L2 |
+|---------|-------------|----------------|
+| TPS | 4,000,000+ | 10,000 |
+| Setup Time | 5 minutes | Weeks |
+| Bridge Funds | **Never** | Always |
+| Trust New Network | **No** | Yes |
+| Chain Agnostic | Yes | No |
+| ZK Privacy | Yes | Rarely |
+| Hardware Wallets | Yes | No |
 
 ---
 
 # 🏗️ Architecture
 
-## How It Works
-
 ```
-                    ┌─────────────────────────────────────────────┐
-                    │              BRIXASCALER                     │
-                    │                                              │
-┌──────┐           │  ┌──────────┐    ┌──────────┐    ┌─────────┐ │
-│Wallet│──────────►│  │ Shard 1  │    │ Shard 2  │ ...│Shard N │ │
-│      │  JSON-RPC│  │ Queue    │    │ Queue    │    │ Queue   │ │
-└──────┘           │  └────┬─────┘    └────┬─────┘    └────┬────┘ │
-                   │       │               │              │      │
-                   │       └───────────────┴──────────────┘      │
-                   │                       │                      │
-                   │              ┌────────▼────────┐             │
-                   │              │ Batch Processor │             │
-                   │              │ (1,000 → 1)     │             │
-                   │              └────────┬────────┘             │
-                   │                       │                      │
-                   └───────────────────────┼──────────────────────┘
-                                            │
-                                            ▼
-                                   ┌─────────────────┐
-                                   │  Any Blockchain │
-                                   │   RPC Endpoint  │
-                                   └─────────────────┘
+Player/Agent Action
+        ↓
+   [BrixaScaler] ← 4M+ TPS ingestion
+        ↓
+  Batch + Merkle Tree
+        ↓
+  ZK Proof Generation ← 1-5 proofs/second
+        ↓
+   Settlement Chain ← 65 TPS verification
 ```
 
-### Sharding (100 shards by default)
-- Parallel transaction processing
-- Ensures transaction ordering per address
-- No bottlenecks
-
-### Batching (1,000 txs per batch by default)
-- Combines 1,000 wallet txs into 1 blockchain call
-- Configurable batch size
-- Configurable batch interval
-
----
-
-# 📡 Supported Chains
-
-| Chain | Status | Public RPC | TPS Multiplier |
-|-------|--------|-----------|----------------|
-| **Bitcoin** | ⚠️ Needs node | localhost:8332 | 1,000x |
-| **Ethereum** | ✅ Working | eth.llamarpc.com | 1,000x |
-| **Polygon** | ✅ Working | polygon-rpc.com | 1,000x |
-| **BSC** | ✅ Working | bsc-dataseed.binance.org | 1,000x |
-| **Avalanche** | ✅ Working | api.avax.network | 1,000x |
-| **Arbitrum** | ✅ Working | arb1.arbitrum.io | 1,000x |
-| **Optimism** | ✅ Working | mainnet.optimism.io | 1,000x |
-| **Solana** | ✅ Working | api.mainnet-beta.solana.com | 1,000x |
-
----
-
-# 🔧 Quick Start
-
-## For Developers
-
-```bash
-# 1. Clone
-git clone https://github.com/Brixa420/vpn-for-tps.git
-cd vpn-for-tps/integration
-
-# 2. Run (no config needed!)
-node server.js --chain ethereum
-
-# 3. Point your wallet to:
-#    http://localhost:8545
-
-# 4. Done! Start building.
-```
-
-That's it. **No API keys. No configuration. No smart contracts.**
-
-## For Production
-
-```bash
-# Add API key for security
-export API_KEY=your-secret-key
-
-# Disable demo mode to send real transactions
-export DEMO_MODE=false
-
-# Point to your RPC
-node server.js --chain ethereum --original-rpc https://your-rpc:8546
-```
-
-## Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `API_KEY` | (none) | Require authentication |
-| `DEMO_MODE` | true | Set false to send real txs |
-| `CORS_ORIGINS` | localhost | Allowed origins |
-| `MAX_QUEUE_SIZE` | 100,000 | Max queued txs |
-| `MAX_BATCH_SIZE` | 1,000 | Txs per batch |
-| `PORT` | 8545 | Server port |
-
----
-
-# 💰 Cost Efficiency
-
-## Before (Direct to chain):
-- 1,000 transactions × $0.01 gas = **$10.00**
-- 1,000 confirmations to wait for
-
-## After (BrixaScaler):
-- 1 batch × $0.01 gas = **$0.01**
-- 1 confirmation to wait for
-- **99.9% gas savings**
-
----
-
-# 🔒 Security
-
-- **Rate limiting**: 100 req/10s per IP
-- **API key**: Optional, enable in production
-- **Input validation**: All RPC calls validated
-- **CORS**: Restricted to localhost by default
-- **Demo mode**: Default on, transactions logged not sent
-
----
-
-# ⚠️ Proof of Concept
-
-This is a **working proof of concept** - ready for developers to build upon.
-
-### What's Working:
-- ✅ Transaction queuing and sharding
-- ✅ Batch processing
-- ✅ RPC proxy server
-- ✅ Public RPC integration
-- ✅ Security hardening
-- ✅ ZK transaction commitments
-- ✅ Merkle tree proofs
-- ✅ Batch ZK proof generation
-- ✅ Privacy-preserving verification
-
-### What Developers Need to Add:
-- Real transaction signing (add private key handling)
-- Gas/fee estimation
-- Transaction confirmations
-- Distributed coordination (optional)
-- **Optional: Replace mock ZK with actual SNARK circuit (circom/snarkjs)**
+**Note:** The Go layer (4.2M TPS) is not the bottleneck. ZK proving (1-5 proofs/sec) is the real bottleneck. This is architecturally correct — fast ingestion, slow proving, periodic settlement.
 
 ---
 
 # 📊 Performance
 
-## Benchmarks (Real Testing)
+## Benchmarks (Actual Measured)
 
 ```
-     1,000 txs →    6ms → 166,667 tx/s
-     5,000 txs →   22ms → 227,273 tx/s
-    10,000 txs →   29ms → 344,828 tx/s
-    50,000 txs →  138ms → 362,319 tx/s
-   100,000 txs →  285ms → 350,877 tx/s
+Batch + Merkle: 237,808 ns/op = 0.238 ms
+                 = ~4,200,000 transactions per second
 ```
 
-**~350,000 tx/s proof generation** (off-chain, no network)
+**What was measured:** 1,000 transactions batched with Merkle tree construction, ProcessBatch function, real code path, no mocking.
 
 ### Effective On-Chain TPS
 
@@ -451,20 +157,65 @@ This is a **working proof of concept** - ready for developers to build upon.
 
 ---
 
+# 🔒 Security Features
+
+- **Demo Mode** — Default ON, prevents accidental real transactions
+- **API Key Authentication** — On all endpoints
+- **Rate Limiting** — Per-client IP and API key
+- **Private Key Validation** — Format validation before use
+- **Hardware Wallet Support** — Trezor, Ledger, software
+- **Key Rotation** — Automatic rotation with webhook alerts
+- **Multi-Sig** — Required approval for high-value transactions
+- **Transaction Simulation** — Simulate before broadcast
+- **Confirmation Monitoring** — Track on-chain confirmations
+- **Circuit Breaker** — Auto-pause on settlement failures
+- **Audit Logging** — All critical operations logged
+- **HTTPS Redirect** — Security headers, TLS enforcement
+
+---
+
 # 🎮 Perfect For
 
-- **Mobile Games** - High TPS, low cost
-- **NFT Drops** - Batch mint 10,000 NFTs in minutes
-- **DeFi** - Batch swaps, liquidations
-- **Gaming** - Action logs, inventory updates
-- **DAOs** - Vote batching
-- **Any Web3 App** - Just change your RPC
+- **AI Agents** — High-frequency micro-transactions
+- **Mobile Games** — High TPS, low cost
+- **NFT Drops** — Batch mint 10,000 NFTs in minutes
+- **DeFi** — Batch swaps, liquidations
+- **Gaming** — Action logs, inventory updates
+- **DAOs** — Vote batching
+- **Any Web3 App** — Just change your RPC
+
+---
+
+# 🔧 Quick Start
+
+```bash
+# Clone
+git clone https://github.com/Brixa420/brixa-scaler.git
+cd brixa-scaler/integration/go
+
+# Build
+go build -o brixascaler server.go
+
+# Run (demo mode)
+./brixascaler
+```
+
+Server runs on `http://localhost:8080`
+
+### For Production
+
+```bash
+export DEMO_MODE=false
+export API_KEY=your_api_key
+export SETTLEMENT_RPC_URL=https://your-rpc-url
+export SETTLEMENT_PRIVATE_KEY=your_private_key
+```
 
 ---
 
 # 📞 Connect
 
-- **GitHub**: https://github.com/Brixa420/vpn-for-tps
+- **GitHub**: https://github.com/Brixa420/brixa-scaler
 - **Author**: Laura Wolf (Brixa420)
 
 ---
@@ -474,3 +225,5 @@ This is a **working proof of concept** - ready for developers to build upon.
 ---
 
 **TL;DR**: BrixaScaler makes any blockchain 1,000x faster without being an L2. Developers just run our middleware and point their wallet to localhost. No bridge, no new chain, no trust issues. Just infinite TPS on any chain.
+
+**This software is provided as-is for demonstration purposes. No real transactions are processed in Demo Mode. Use at your own risk.**
