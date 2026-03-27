@@ -29,9 +29,9 @@ BrixaScaler uses a **two-layer + settlement** architecture to achieve 4M TPS whi
 ┌─────────────────────────────────────────────────────────────────┐
 │              LAYER 1: BATCHING LAYER                            │
 ├─────────────────────────────────────────────────────────────────┤
-│  Input: ~4,000,000 TPS raw transactions                        │
+│  Input: ~3,400,000 TPS raw transactions (benchmarked on M3)   │
 │  Process: Hash → Build Merkle Tree → Create batch root        │
-│  Output: ~4,000 batches/sec (1000 txs/batch)                  │
+│  Output: ~3,400 batches/sec (1000 txs/batch)                  │
 │  Speed: Sub-millisecond (CPU only, no gas)                    │
 │  Cost: $0.000001 per transaction                              │
 └─────────────────────────────────────────────────────────────────┘
@@ -93,7 +93,7 @@ User Action (4M TPS)
 ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
 │   BATCHING   │ ──→ │     ZK       │ ──→ │  SETTLEMENT  │
 │    LAYER     │     │    LAYER     │     │    LAYER     │
-│  ~4M TPS     │     │  ~17K TPS    │     │   ~65 TPS    │
+│  ~3.4M TPS   │     │  ~17K TPS    │     │   ~65 TPS    │
 └──────────────┘     └──────────────┘     └──────────────┘
    (1000 txs)           (ZK proof)        (260 proofs/tx)
 ```
@@ -102,15 +102,17 @@ User Action (4M TPS)
 
 | Stage | Input TPS | Output TPS | Batching |
 |-------|-----------|------------|----------|
-| **Batching** | 4,000,000 | 4,000 | 1000 txs/batch |
-| **ZK** | 4,000 | 17,000 | 1 root = 1 proof |
+| **Batching** | 3,400,000 | 3,400 | 1000 txs/batch |
+| **ZK** | 3,400 | 17,000 | 1 root = 1 proof |
 | **Settlement** | 17,000 | 65 | 260 proofs/tx |
+
+> **Benchmarked on Apple M3 (10-core):** 10M transactions in 3.7s = ~2.7M TPS sustained. Peak: 3.4M TPS.
 
 ## Why Split Layers?
 
 | Layer | What It Does | TPS | Cost | Handles |
 |-------|--------------|-----|------|---------|
-| **Batching** | Hash + Merkle root | ~4,000,000 | Near-zero | Game moves, AI calls, clicks |
+| **Batching** | Hash + Merkle root | ~3,400,000 | Near-zero | Game moves, AI calls, clicks |
 | **ZK** | Generate cryptographic proof | ~17,000 | CPU only | Prove batch validity |
 | **Settlement** | Submit to blockchain | 15-65 | $0.01-0.10/tx | Money, assets, ownership |
 
