@@ -275,7 +275,7 @@ class BrixaScaler {
 
 function createServer() {
   // Require RPC
-  if (!CONFIG.rpcUrl) {
+  if (!CONFIG.rpcUrl && !CONFIG.demoMode) {
     console.log('\n❌ ERROR: You must provide an RPC URL!\n');
     console.log('Usage: node brixa-scaler.js --rpc <YOUR_RPC_URL>\n');
     console.log('Examples:');
