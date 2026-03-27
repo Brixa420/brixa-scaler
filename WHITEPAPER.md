@@ -23,7 +23,7 @@
 
 BrixaScaler is designed as a **Layer 3/4 batching infrastructure**. We separate the fast ingestion from the secure settlement.
 
-## Layer 1: Batching Layer (4.2M+ TPS)
+## Layer 1: Batching Layer (~3.7M TPS)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -31,7 +31,7 @@ BrixaScaler is designed as a **Layer 3/4 batching infrastructure**. We separate 
 ├─────────────────────────────────────────────────────────────────┤
 │  Your App/API → Hash Transactions → Batch in Memory           │
 │                                                                 │
-│  TPS: 4,200,000+                                              │
+│  TPS: ~3,700,000                                              │
 │  Latency: <1 millisecond                                      │
 │  Cost: $0.000001 per transaction (CPU only)                  │
 │  Security: Receipts (not yet on-chain)                        │
@@ -71,7 +71,7 @@ BrixaScaler is designed as a **Layer 3/4 batching infrastructure**. We separate 
 
 | Metric | Batching Layer | ZK Settlement |
 |--------|---------------|---------------|
-| **TPS** | 4,200,000+ | ~17,000 |
+| **TPS** | 3,700,000 | ~17,000 |
 | **Latency** | <1ms | 30-300s |
 | **Cost/tx** | $0.000001 | $0.01-0.10 |
 | **Use Case** | Real-time actions (games, AI) | Final settlement |
@@ -126,7 +126,7 @@ Every time someone creates a new L2:
 
 What if you could:
 - Keep using **ANY** blockchain (Ethereum, Polygon, Arbitrum, etc.)
-- Get **4,000,000+ TPS** on transaction ingestion
+- Get **3,700,000+ TPS** on transaction ingestion
 - Pay **less than a cent** per thousand transactions
 - Prove **correctness** with ZK proofs without revealing data
 - **Never bridge** funds or trust new networks
@@ -178,7 +178,7 @@ BrixaScaler gives you a **fourth option**: build on our batching layer, settle t
 
 ### Why This Architecture Makes Sense
 
-1. **Massive throughput for your app** (4.2M TPS)
+1. **Massive throughput for your app** (3.7M TPS)
    - AI agents making millions of API calls
    - Games with hundreds of actions per second
    - DeFi with high-frequency trading
@@ -216,7 +216,7 @@ Step 3: Final cost: $0.11 for 1M actions
 ```
 Step 1: Player clicks 100 times/second
         ↓
-        All batched instantly on BrixaScaler (4.2M TPS capacity)
+        All batched instantly on BrixaScaler (3.7M TPS capacity)
         ↓
 Step 2: Every 10 seconds → batch settles to Polygon ($0.001)
         ↓
@@ -236,7 +236,7 @@ Traditional L2s require bridging funds, deploying to a new network, and trusting
 
 | Feature | BrixaScaler | Traditional L2 |
 |---------|-------------|----------------|
-| Ingestion TPS | 4,200,000 | 10,000 |
+| Ingestion TPS | 3,700,000 | 10,000 |
 | Setup Time | 5 minutes | Weeks |
 | Bridge Funds | **Never** | Always |
 | Trust New Network | **No** | Yes |
@@ -261,7 +261,7 @@ Player/Agent Action
    Settlement Chain ← 65 TPS verification
 ```
 
-**Note:** The Go layer (4.2M TPS) is not the bottleneck. ZK proving (1-5 proofs/sec) is the real bottleneck. This is architecturally correct — fast ingestion, slow proving, periodic settlement.
+**Note:** The Go layer (3.7M TPS) is not the bottleneck. ZK proving (1-5 proofs/sec) is the real bottleneck. This is architecturally correct — fast ingestion, slow proving, periodic settlement.
 
 ---
 
@@ -271,7 +271,7 @@ Player/Agent Action
 
 ```
 Batch + Merkle: 237,808 ns/op = 0.238 ms
-                 = ~4,200,000 transactions per second
+                 = ~3,700,000 transactions per second
 ```
 
 **What was measured:** 1,000 transactions batched with Merkle tree construction, ProcessBatch function, real code path, no mocking.
@@ -291,7 +291,7 @@ Batch + Merkle: 237,808 ns/op = 0.238 ms
 
 | Hardware | Result | Implication |
 |----------|--------|-------------|
-| Mac Mini M4 (10-core, $600) | 4.2M TPS ingestion | This is the floor, not the ceiling |
+| Mac Mini M4 (10-core, $600) | 3.7M TPS ingestion | This is the floor, not the ceiling |
 | Better hardware | Linear scaling | More cores = more shards = more TPS |
 | Server-grade hardware | 10M+ TPS likely | 64-core AMD EPYC, Intel Xeon |
 | Cloud instances | Auto-scaling | Kubernetes horizontal pod scaling |
@@ -300,7 +300,7 @@ Batch + Merkle: 237,808 ns/op = 0.238 ms
 
 | Current | Potential |
 |----------|-----------|
-| 4.2M TPS on Mac Mini M4 | 10M+ TPS on server hardware |
+| 3.7M TPS on Mac Mini M4 | 10M+ TPS on server hardware |
 | Single machine | Distributed across many machines |
 | 10-core parallelism | 64-core, 128-core, or more |
 

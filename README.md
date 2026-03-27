@@ -65,7 +65,7 @@ BrixaScaler is designed as a **Layer 3/4** batching infrastructure. Understandin
 
 | Metric | Batching Layer | ZK Settlement |
 |--------|---------------|---------------|
-| TPS | 4,200,000+ | ~17,000 |
+| TPS | ~3,700,000 | ~17,000 |
 | Latency | <1ms | 30-300s |
 | Cost per tx | $0.000001 | $0.01-0.10 |
 | Use case | Real-time actions | Final settlement |
@@ -76,7 +76,7 @@ BrixaScaler is designed as a **Layer 3/4** batching infrastructure. Understandin
 
 ## 🎯 Why Build on BrixaScaler's Batching Layer
 
-1. **Massive throughput** — 4.2M TPS handles AI agents, games, DeFi at Web2 speeds
+1. **Massive throughput** — 3.7M TPS handles AI agents, games, DeFi at Web2 speeds
 2. **Dramatically cheaper** — Ingest at $0.000001/tx, settle periodically at $0.01/tx
 3. **Settle to L2/L1** — Your users get real blockchain ownership on Ethereum, Arbitrum, Optimism, etc.
 4. **ZK verified** — No trusted intermediary - cryptographic proof of batch validity
@@ -91,7 +91,7 @@ BrixaScaler is designed as a **Layer 3/4** batching infrastructure. Understandin
 
 ### Example: Blockchain Game
 ```
-1. Player clicks 100 times/second → all batched locally (4.2M TPS)
+1. Player clicks 100 times/second → all batched locally (3.7M TPS)
 2. Every 10 seconds → batch settles to Polygon → $0.001
 3. Player gets real on-chain ownership periodically
 4. Result: Instant gameplay + real assets = best of both worlds
