@@ -29,7 +29,7 @@ BrixaScaler uses a **two-layer + settlement** architecture to achieve high throu
 ┌─────────────────────────────────────────────────────────────────┐
 │              LAYER 1: BATCHING LAYER                            │
 ├─────────────────────────────────────────────────────────────────┤
-│  Input: ~2.85M TPS raw transactions (benchmarked on M3)   │
+│  Input: ~2.85M TPS raw transactions (benchmarked on M4)   │
 │  Process: Hash → Build Merkle Tree → Create batch root        │
 │  Output: 337K batches/sec (1000 txs/batch)                │
 │  Speed: Sub-millisecond (CPU only, no gas)                    │
@@ -106,7 +106,7 @@ User Action (2.8M TPS)
 | **ZK** | 3,400 | 337K TPS | 1 root = 1 proof |
 | **Settlement** | 337K TPS | 1 tx/10M | 1 tx for 10M txs |
 
-> **Benchmarked on Apple M3 (10-core):** 10M transactions in 0.8s = 2.8M TPS sustained. Peak: 12.8M TPS.
+> **Benchmarked on Apple M4 (10-core):** 10M transactions in 0.8s = 2.8M TPS sustained. Peak: 12.8M TPS.
 
 ## Why Split Layers?
 
