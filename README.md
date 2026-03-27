@@ -46,13 +46,13 @@ The following features are **stubbed out or partially implemented** and need to 
 
 ## 🏗️ Two-Layer Architecture: Batching → ZK → Settlement
 
-BrixaScaler uses a **two-layer + settlement** architecture to achieve 4M TPS while maintaining blockchain security:
+BrixaScaler uses a **two-layer + settlement** architecture to achieve 2.8M TPS while maintaining blockchain security:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ LAYER 1: BATCHING LAYER (High Throughput)                             │
 │ ────────────────────────────────────────                              │
-│ • Input: ~4,000,000 TPS raw transactions                             │
+│ • Input: ~2,850,000 TPS raw transactions                             │
 │ • Process: Hash → Build Merkle Tree → Create batch root               │
 │ • Output: ~4,000 batches/sec (1000 txs/batch)                        │
 │ • Speed: Sub-millisecond (CPU only, no gas)                           │
@@ -84,12 +84,12 @@ BrixaScaler uses a **two-layer + settlement** architecture to achieve 4M TPS whi
 ### Flow Diagram
 
 ```
-User Action (4M TPS)
+User Action (2.8M TPS)
     ↓
 ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
 │   BATCHING   │ ──→ │     ZK       │ ──→ │  SETTLEMENT  │
 │    LAYER     │     │    LAYER     │     │    LAYER     │
-│  ~4M TPS     │     │  ~17K TPS    │     │   ~65 TPS    │
+│  ~2.8M TPS     │     │  ~337K TPS    │     │   1 tx/10M txs    │
 └──────────────┘     └──────────────┘     └──────────────┘
    (1000 txs)           (ZK proof)        (260 proofs/tx)
 ```
@@ -98,16 +98,16 @@ User Action (4M TPS)
 
 | Layer | What It Does | TPS | Cost | Use Case |
 |-------|--------------|-----|------|----------|
-| **Batching** | Hash + Merkle root | ~4,000,000 | Near-zero | Game moves, AI calls, clicks |
+| **Batching** | Hash + Merkle root | ~2,850,000 | Near-zero | Game moves, AI calls, clicks |
 | **ZK** | Generate cryptographic proof | ~17,000 | CPU only | Prove batch validity |
 | **Settlement** | Submit to blockchain | 15-65 | $0.01-0.10/tx | Money, assets, ownership |
 
-**The key insight:** You don't need blockchain for every action. You only need it when settling. This is like a restaurant - orders come in fast (4M actions), checks are settled later (65 TPS). The player feels instant. The blockchain sees security.
+**The key insight:** You don't need blockchain for every action. You only need it when settling. This is like a restaurant - orders come in fast (2.8M actions), checks are settled later (65 TPS). The player feels instant. The blockchain sees security.
 
 ### Configuration for TPS Balance
 
 ```bash
-MAX_BATCH_SIZE=1000           # txs per batch → 4K batches/sec from 4M TPS
+MAX_BATCH_SIZE=1000           # txs per batch → 4K batches/sec from 2.8M TPS
 SETTLEMENT_AGGREGATE_N=260    # ZK proofs bundled per settlement tx (~17k/260 = ~65)
 ```
 
@@ -115,9 +115,9 @@ SETTLEMENT_AGGREGATE_N=260    # ZK proofs bundled per settlement tx (~17k/260 = 
 
 ## 🎯 Why Build on BrixaScaler's Batching Layer
 
-1. **Web2 speed** — 4M actions TPS for instant gameplay, AI interactions
+1. **Web2 speed** — 2.8M actions TPS for instant gameplay, AI interactions
 2. **Web3 ownership** — Settle to L1/L2 for real blockchain assets
-3. **Dramatically cheaper** — 4M actions at $0.000001/tx, settle at $0.01/tx
+3. **Dramatically cheaper** — 2.8M actions at $0.000001/tx, settle at $0.01/tx
 4. **ZK verified** — No trusted intermediary - cryptographic proof of batch validity
 5. **No app-chain fragmentation** — Single batching layer, any settlement chain
 
@@ -130,7 +130,7 @@ SETTLEMENT_AGGREGATE_N=260    # ZK proofs bundled per settlement tx (~17k/260 = 
 
 ### Example: Blockchain Game
 ```
-1. Player clicks 100 times/second → all batched locally (4M TPS)
+1. Player clicks 100 times/second → all batched locally (2.8M TPS)
 2. Every 10 seconds → batch settles to Polygon → $0.001
 3. Player gets real on-chain ownership periodically
 4. Result: Instant gameplay + real assets = best of both worlds
@@ -261,7 +261,7 @@ Server runs on `http://localhost:8080` by default.
 ```
 Player/Agent Action
         ↓
-   [BrixaScaler] ← 4M+ TPS ingestion
+   [BrixaScaler] ← 2.8M+ TPS ingestion
         ↓
   Batch + Merkle Tree
         ↓
