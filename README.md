@@ -95,8 +95,6 @@ The Go layer is not the bottleneck. The bottleneck is ZK proving at one to five 
 
 ## Quick Start
 
-## Quick Start
-
 ```bash
 # Install dependencies
 npm install
