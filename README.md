@@ -152,30 +152,6 @@ This software handles cryptographic operations and blockchain transactions. Secu
 
 ---
 
-## Immediate Security Checklist
-
-### Private Key Handling
-- Never log private keys
-- Use environment variables or secure vaults only
-- Encrypt key files at rest
-- Support hardware wallets or KMS
-
-### API Security
-- Authentication on all endpoints
-- Input validation and sanitization
-- Rate limiting per client
-- HTTPS only, no HTTP fallback
-
-### Settlement Safety
-- Transaction signing verification before broadcast
-- Gas price limits to prevent overpayment
-- Nonce tracking to prevent stuck transactions
-- Confirmation monitoring with retry logic
-
-### General Hardening
-
----
-
 ## Environment Variables
 
 ### Security
