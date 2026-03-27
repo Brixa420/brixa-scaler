@@ -1,43 +1,51 @@
-# BrixaScaler - Complete Benchmark Report
+# BrixaScaler - Benchmark Report (Honest Assessment)
 
-## 🎉 FULL PIPELINE MEASURED
+## What's Real
 
-| Layer | Throughput | Status |
-|-------|------------|--------|
-| Batching | **2,850,000 TPS** | ✅ Measured |
-| ZK Proving | **337,000 TPS** | ✅ Measured |
-| Settlement | **1 tx / 10M txs** | ✅ Verified |
-| Compression | **1,000:1** | ✅ Achieved |
+| Layer | Throughput | Status | Notes |
+|-------|------------|--------|-------|
+| Batching | **2,850,000 TPS** | ✅ Real | Go + SHA256 + Merkle |
+| ZK Proving | **~800 TPS** | ✅ Real | gnark (3-constraint circuit) |
+| circom/snarkjs | **~2.5 TPS** | ✅ Real | Verification only |
+
+## What's Theoretical/Simulated
+
+| Layer | Claimed | Reality |
+|-------|---------|---------|
+| ZK Proving | 337K TPS | ❌ Not measured |
+| Settlement | 1 tx/10M txs | ❌ Not verified on-chain |
+| Compression | 1000:1 | ❌ Math only |
+
+**Note:** The 337K TPS was calculated as `batchSize / time`, which is wrong. ZK proving time doesn't scale inversely with batch size.
 
 ---
 
-## 🏗️ Three-Layer Architecture
+## 🏗️ Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                        BRIXA SCALER                                      │
 ├─────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
 │  Transactions (10M)                                                      │
-│      │                                                                    │
-│      ▼                                                                    │
+│      │                                                                  │
+│      ▼                                                                  │
 │  ┌─────────────┐     ┌─────────────┐     ┌─────────────────────────┐    │
 │  │   Batching  │────▶│  ZK Prover  │────▶│  Recursive Aggregation  │    │
-│  │  2,850,000  │     │   337,000   │     │     1,000:1            │    │
+│  │  2,850,000  │     │    ~800     │     │     (theoretical)      │    │
 │  │    TPS      │     │    TPS      │     │                        │    │
-│  └─────────────┘     └─────────────┘     └───────────┬─────────────┘  │
+│  └─────────────┘     └─────────────┘     └───────────┬─────────────┘    │
 │                                                        │                │
 │                                                        ▼                │
 │                                              ┌─────────────────────┐    │
 │                                              │  Settlement Proof   │    │
-│                                              │   (1 on-chain tx)   │    │
+│                                              │   (not verified)    │    │
 │                                              └─────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 📊 Layer-by-Layer Results
+## Real Measurements
 
 ### Layer 1: Transaction Batching
 | Transactions | Time | Throughput |
@@ -47,27 +55,20 @@
 | 10,000,000 | 3.5s | 2,851,371 TPS |
 
 **Method:** SHA256 + Merkle tree (multi-core Go)
-**Cost:** $0.000001 per transaction
+**Status:** ✅ Real, reproducible
 
-### Layer 2: ZK Proving
-| Batch Size | Time | Throughput |
-|------------|------|------------|
-| 100K txs | 295ms | 339K TPS |
-| 1M txs | 3.0s | 333K TPS |
-| 10M txs | 29.7s | 337K TPS |
+### Layer 2: ZK Proving (gnark)
+```
+100 proofs: 125ms = 800 TPS
+```
+- Circuit: 3 constraints (trivial)
+- Backend: Groth16, BN254
+- Status: ✅ Real proof generation
 
-**Method:** gnark (Groth16)
-**Note:** circom circuits need fixing for production
-
-### Layer 3: Settlement
-| Transactions | Batches | Settlement Proofs | Time | Compression |
-|--------------|---------|-------------------|------|-------------|
-| 10K | 1 | 1 | 29ms | 1:1 |
-| 100K | 10 | 1 | 295ms | 10:1 |
-| 1M | 100 | 1 | 3.0s | 100:1 |
-| 10M | 1,000 | 1 | 29.7s | 1,000:1 |
-
-**Result:** 10 million transactions → 1 on-chain transaction
+### circom/snarkjs
+- Verification: ~400ms per proof
+- Throughput: ~2.5 TPS
+- Status: ✅ Works but slow on CPU
 
 ---
 
@@ -78,52 +79,44 @@ brixa-scaler/
 ├── benchmark/
 │   └── benchmark.go          # Batching layer benchmark
 ├── zk-gnark/
-│   ├── recursive_aggregation.go  # Full pipeline
-│   ├── nova_true.go          # Nova folding
-│   └── *.go                  # ZK circuits
-├── contracts/
-│   ├── Verifier.sol          # Main verifier
-│   └── RecursiveVerifier.sol # Aggregation contract
-├── server/
-│   └── rpc_server.go         # RPC server
+│   ├── recursive_aggregation.go  # Aggregation pipeline
+│   ├── batch_circuit.go      # gnark circuit
+│   └── nova_folding.go       # Nova folding
+├── zk/
+│   └── real_prover.js        # circom/snarkjs prover
 └── BENCHMARKS.md             # This file
 ```
 
 ---
 
-## 🚀 Quick Start
+## 🔑 Honest Assessment
 
-```bash
-# Batching benchmark
-cd benchmark && go run benchmark.go
-
-# Full ZK pipeline
-cd zk-gnark && go run recursive_aggregation.go
-```
-
----
-
-## 🔑 Key Insights
-
-1. **Batching is fast** - 2.8M TPS achievable in pure Go
-2. **ZK is the bottleneck** - 337K TPS (limited by circuit complexity)
-3. **Recursive aggregation works** - 1,000:1 compression verified
-4. **Settlement is 1 tx** - Not technical, economic (gas costs)
+1. **Batching is fast** - 2.85M TPS is real and reproducible
+2. **ZK is slow** - ~800 TPS on CPU with gnark, ~2.5 TPS with circom
+3. **337K TPS claim is wrong** - Was calculated incorrectly
+4. **Settlement not verified** - No actual on-chain test yet
 
 ---
 
 ## ✅ What's Complete
 
-- [x] Batching layer (2.8M TPS)
-- [x] ZK proving (337K TPS)
-- [x] Recursive aggregation (1,000:1)
-- [x] Settlement proof (1 tx for 10M txs)
-- [x] Verifier contracts (Solidity)
+- [x] Batching layer (2.85M TPS real)
+- [x] ZK circuits compile (gnark + circom)
+- [x] Real proof generation works
+- [ ] High-throughput ZK (needs GPU)
+- [ ] On-chain settlement verification
 
 ---
 
-## 🎯 Production Notes
+## 🎯 Path Forward
 
-- circom compiler needs Node 18 (currently broken on Node 25)
-- GPU proving would increase ZK throughput 10-100x
-- Actual on-chain verification depends on target L1/L2
+1. **Fix circom compiler** (needs Node 18)
+2. **Add GPU proving** (10-100x faster)
+3. **Design real batch circuit** (not trivial)
+4. **Test on actual L1/L2** (not simulated)
+
+---
+
+## Disclaimer
+
+The 337K TPS ZK claim in earlier versions was incorrect. Real ZK proving is much slower on CPU hardware. The batching layer performance is the only number that's been properly measured and verified.
