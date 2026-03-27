@@ -4,6 +4,10 @@
 
 ---
 
+> ⚠️ **INCOMPLETE SOFTWARE** — This is a prototype/MVP. Not all features are implemented. Meant for a senior developer to finish. See GitHub issues for implementation status.
+
+---
+
 > ⚠️ **For Developers:** This is pre-production software. ZK proof generation, actual RPC settlement, and hardware wallet signing are stubs/placeholders. See GitHub issues for implementation status.
 
 

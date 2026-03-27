@@ -1,5 +1,7 @@
 # BrixaScaler
 
+> ⚠️ **INCOMPLETE SOFTWARE** — This is a prototype/MVP. Not all features are implemented. Meant for a senior developer to finish. See GitHub issues for implementation status.
+
 ⚠️ **IMPORTANT: DEMO MODE**
 
 **DEFAULT IS DEMO MODE** — Transactions are logged but NOT sent to any blockchain!
