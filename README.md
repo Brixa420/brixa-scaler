@@ -246,4 +246,10 @@ docker-compose up -d
 ---
 
 
+---
+
+## License
+
 MIT
+
+**Demo Only - Don't Sue Us:** This software is provided as-is for demonstration purposes. No real transactions are processed by default. Use at your own risk.
