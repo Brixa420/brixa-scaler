@@ -368,6 +368,17 @@ docker-compose up -d
 
 ---
 
+---
+
+## About the Author
+
+Built by an accountant who found crypto, thought it would eliminate tradfi, 
+and accidentally built the infrastructure that makes both actually work.
+
+Sometimes the holy grail looks like a really fast database with cryptographic receipts.
+
+---
+
 ## License
 
 MIT
