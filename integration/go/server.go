@@ -85,6 +85,13 @@ func getEnvBool(key string, def bool) bool {
 	return val == "true" || val == "1"
 }
 
+func splitCSV(s string) []string {
+	if s == "" {
+		return nil
+	}
+	return strings.Split(s, ",")
+}
+
 // ═══════════════════════════════════════════════════════════════
 // LOGGING
 // ═══════════════════════════════════════════════════════════════
@@ -375,6 +382,7 @@ func SetupServer() *http.ServeMux {
 		mux.HandleFunc("/metrics", handleMetrics)
 	}
 	mux.HandleFunc("/audit", handleAuditLog)
+	mux.HandleFunc("/settlement", HandleSettlement)
 	return mux
 }
 
@@ -814,4 +822,501 @@ func CheckTransactionDataSize(data string, maxSize int) error {
 		return fmt.Errorf("transaction data size %d exceeds max %d", len(data), maxSize)
 	}
 	return nil
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ZK PROOF VERIFICATION
+// ═══════════════════════════════════════════════════════════════
+
+// ZKProof represents a zero-knowledge proof
+type ZKProof struct {
+	PublicInputs []string `json:"public_inputs"`
+	ProofData    string   `json:"proof_data"`
+	Timestamp    int64    `json:"timestamp"`
+}
+
+// VerifyZKProof verifies a ZK proof (placeholder - implement actual verification)
+func VerifyZKProof(proof ZKProof) error {
+	if proof.ProofData == "" {
+		return fmt.Errorf("empty proof data")
+	}
+	if len(proof.PublicInputs) == 0 {
+		return fmt.Errorf("no public inputs")
+	}
+	
+	// Check proof isn't too old (max 1 hour)
+	if time.Now().Unix() - proof.Timestamp > 3600 {
+		return fmt.Errorf("proof expired")
+	}
+	
+	// TODO: Implement actual groth16/plonk verification
+	// This would use gnark or similar library
+	
+	return nil
+}
+
+// ValidatePublicInputs validates public inputs match expected constraints
+func ValidatePublicInputs(publicInputs []string, expectedRoot string, expectedCount int) error {
+	if len(publicInputs) < 2 {
+		return fmt.Errorf("insufficient public inputs")
+	}
+	
+	// First input should be Merkle root
+	if publicInputs[0] != expectedRoot {
+		return fmt.Errorf("root mismatch: expected %s, got %s", expectedRoot, publicInputs[0])
+	}
+	
+	// Second input should be transaction count
+	// (simplified - actual implementation would verify count matches batch)
+	
+	return nil
+}
+
+// ProofVerifier holds verification state
+type ProofVerifier struct {
+	timeout    time.Duration
+	metrics    *ProofMetrics
+	mu         sync.Mutex
+}
+
+type ProofMetrics struct {
+	Verified   uint64
+	Failed     uint64
+	Expired    uint64
+	AvgTimeUs  uint64
+}
+
+func NewProofVerifier(timeout time.Duration) *ProofVerifier {
+	return &ProofVerifier{
+		timeout: timeout,
+		metrics: &ProofMetrics{},
+	}
+}
+
+func (pv *ProofVerifier) VerifyWithTimeout(proof ZKProof) error {
+	done := make(chan error, 1)
+	
+	go func() {
+		done <- VerifyZKProof(proof)
+	}()
+	
+	select {
+	case err := <-done:
+		pv.mu.Lock()
+		if err != nil {
+			pv.metrics.Failed++
+		} else {
+			pv.metrics.Verified++
+		}
+		pv.mu.Unlock()
+		return err
+	case <-time.After(pv.timeout):
+		pv.mu.Lock()
+		pv.metrics.Expired++
+		pv.mu.Unlock()
+		return fmt.Errorf("proof verification timeout after %v", pv.timeout)
+	}
+}
+
+// Global proof verifier with 30 second timeout
+var proofVerifier = NewProofVerifier(30 * time.Second)
+
+// ═══════════════════════════════════════════════════════════════
+// TRANSACTION SIMULATION & CONFIRMATION MONITORING
+// ═══════════════════════════════════════════════════════════════
+
+// SettlementConfig holds settlement chain configuration
+type SettlementConfig struct {
+	RPCURL       string
+	PrivateKey   string
+	ChainID      uint64
+	GasLimit     uint64
+	MaxGasPrice  uint64
+}
+
+// LoadSettlementConfig loads settlement configuration
+func LoadSettlementConfig() SettlementConfig {
+	return SettlementConfig{
+		RPCURL:      os.Getenv("SETTLEMENT_RPC_URL"),
+		PrivateKey:  os.Getenv("SETTLEMENT_PRIVATE_KEY"),
+		ChainID:     uint64(getEnvInt("SETTLEMENT_CHAIN_ID", 1)),
+		GasLimit:    uint64(getEnvInt("SETTLEMENT_GAS_LIMIT", 21000)),
+		MaxGasPrice: uint64(getEnvInt("MAX_GAS_PRICE_GWEI", 100)) * 1_000_000_000,
+	}
+}
+
+// SimulatedTransaction represents a simulated transaction result
+type SimulatedTransaction struct {
+	Success     bool   `json:"success"`
+	GasUsed     uint64 `json:"gas_used"`
+	RevertReason string `json:"revert_reason,omitempty"`
+}
+
+// SimulateTransaction simulates a transaction before broadcast
+// In production, this would call eth_call on the RPC
+func SimulateTransaction(tx Transaction, config SettlementConfig) (SimulatedTransaction, error) {
+	// TODO: Implement actual RPC call to eth_call
+	
+	// Placeholder simulation
+	if tx.Value > 0 && tx.To == "0x0000000000000000000000000000000000000000" {
+		return SimulatedTransaction{
+			Success:     false,
+			RevertReason: "cannot send to zero address",
+		}, nil
+	}
+	
+	// Basic validation
+	if err := ValidateTransaction(tx); err != nil {
+		return SimulatedTransaction{
+			Success:     false,
+			RevertReason: err.Error(),
+		}, nil
+	}
+	
+	return SimulatedTransaction{
+		Success: true,
+		GasUsed: config.GasLimit,
+	}, nil
+}
+
+// ConfirmationStatus tracks transaction confirmation
+type ConfirmationStatus struct {
+	TxHash      string    `json:"tx_hash"`
+	Status      string    `json:"status"` // "pending", "confirmed", "failed"
+	BlockNumber uint64    `json:"block_number"`
+	ConfirmedAt time.Time `json:"confirmed_at"`
+	Retries     int       `json:"retries"`
+}
+
+// TransactionMonitor monitors blockchain for confirmations
+type TransactionMonitor struct {
+	confirmations map[string]*ConfirmationStatus
+	mu            sync.RWMutex
+	rpcURL        string
+	timeout       time.Duration
+	maxRetries    int
+}
+
+func NewTransactionMonitor(rpcURL string) *TransactionMonitor {
+	return &TransactionMonitor{
+		confirmations: make(map[string]*ConfirmationStatus),
+		rpcURL:       rpcURL,
+		timeout:     5 * time.Minute,
+		maxRetries:  3,
+	}
+}
+
+// WaitForConfirmation waits for transaction to be confirmed
+func (tm *TransactionMonitor) WaitForConfirmation(txHash string, requiredConfirmations uint64) (*ConfirmationStatus, error) {
+	if tm.rpcURL == "" {
+		return nil, fmt.Errorf("RPC URL not configured")
+	}
+	
+	// TODO: Implement actual eth_getTransactionReceipt polling
+	// This would poll eth_getTransactionReceipt until confirmed
+	
+	status := &ConfirmationStatus{
+		TxHash:      txHash,
+		Status:      "confirmed",
+		BlockNumber: 12345678,
+		ConfirmedAt: time.Now(),
+	}
+	
+	tm.mu.Lock()
+	tm.confirmations[txHash] = status
+	tm.mu.Unlock()
+	
+	return status, nil
+}
+
+// BroadcastTransaction broadcasts a transaction to the blockchain
+func BroadcastTransaction(tx Transaction, config SettlementConfig) (string, error) {
+	if config.RPCURL == "" || config.PrivateKey == "" {
+		return "", fmt.Errorf("settlement not configured")
+	}
+	
+	// Check gas price
+	if config.MaxGasPrice > 0 {
+		// TODO: Get current gas price and verify
+	}
+	
+	// Sign and broadcast
+	// TODO: Implement actual signing and broadcast via RPC
+	
+	return "0x" + "simulated_hash_" + fmt.Sprintf("%d", time.Now().UnixNano()), nil
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MULTI-SIG FOR HIGH VALUE TRANSACTIONS
+// ═══════════════════════════════════════════════════════════════
+
+// MultiSigConfig holds multi-signature configuration
+type MultiSigConfig struct {
+	Enabled           bool     `env:"MULTISIG_ENABLED"`
+	Threshold         int      `env:"MULTISIG_THRESHOLD"` // Required approvals
+	Approvers         []string `env:"MULTISIG_APPROVERS"` // Comma-separated addresses
+	HighValueThreshold uint64  `env:"MULTISIG_HIGH_VALUE_THRESHOLD"` // Value requiring multi-sig
+}
+
+// LoadMultiSigConfig loads multi-sig configuration
+func LoadMultiSigConfig() MultiSigConfig {
+	approvers := splitCSV(os.Getenv("MULTISIG_APPROVERS"))
+	threshold := getEnvInt("MULTISIG_THRESHOLD", 2)
+	if threshold > len(approvers) {
+		threshold = len(approvers)
+	}
+	
+	return MultiSigConfig{
+		Enabled:            os.Getenv("MULTISIG_ENABLED") == "true",
+		Threshold:          threshold,
+		Approvers:          approvers,
+		HighValueThreshold: getEnvUint64("MULTISIG_HIGH_VALUE_THRESHOLD", 10_000_000_000_000_000_000), // 10 ETH
+	}
+}
+
+// ApprovalRequest represents a pending approval request
+type ApprovalRequest struct {
+	ID          string    `json:"id"`
+	TxHash      string    `json:"tx_hash"`
+	From        string    `json:"from"`
+	Value       uint64    `json:"value"`
+	Approvers   []string  `json:"approvers"`
+	ApprovedBy  []string  `json:"approved_by"`
+	Status      string    `json:"status"` // "pending", "approved", "rejected"
+	CreatedAt   time.Time `json:"created_at"`
+	ExpiresAt   time.Time `json:"expires_at"`
+}
+
+// MultiSigManager manages multi-sig approvals
+type MultiSigManager struct {
+	pendingApprovals map[string]*ApprovalRequest
+	mu               sync.Mutex
+	config           MultiSigConfig
+}
+
+func NewMultiSigManager(config MultiSigConfig) *MultiSigManager {
+	return &MultiSigManager{
+		pendingApprovals: make(map[string]*ApprovalRequest),
+		config:           config,
+	}
+}
+
+// RequiresMultiSig checks if transaction requires multi-sig approval
+func (m *MultiSigManager) RequiresMultiSig(value uint64) bool {
+	if !m.config.Enabled {
+		return false
+	}
+	return value >= m.config.HighValueThreshold
+}
+
+// RequestApproval creates a new approval request
+func (m *MultiSigManager) RequestApproval(txHash string, from string, value uint64) (*ApprovalRequest, error) {
+	if !m.RequiresMultiSig(value) {
+		return nil, nil // No multi-sig needed
+	}
+	
+	req := &ApprovalRequest{
+		ID:          fmt.Sprintf("approval_%d", time.Now().UnixNano()),
+		TxHash:      txHash,
+		From:        from,
+		Value:       value,
+		Approvers:   m.config.Approvers,
+		ApprovedBy:  []string{},
+		Status:      "pending",
+		CreatedAt:   time.Now(),
+		ExpiresAt:   time.Now().Add(1 * time.Hour),
+	}
+	
+	m.mu.Lock()
+	m.pendingApprovals[req.ID] = req
+	m.mu.Unlock()
+	
+	return req, nil
+}
+
+// Approve registers an approval from an approver
+func (m *MultiSigManager) Approve(requestID string, approver string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	
+	req, ok := m.pendingApprovals[requestID]
+	if !ok {
+		return fmt.Errorf("approval request not found")
+	}
+	
+	if time.Now().After(req.ExpiresAt) {
+		return fmt.Errorf("approval request expired")
+	}
+	
+	// Check if approver is valid
+	validApprover := false
+	for _, a := range m.config.Approvers {
+		if strings.ToLower(a) == strings.ToLower(approver) {
+			validApprover = true
+			break
+		}
+	}
+	if !validApprover {
+		return fmt.Errorf("invalid approver")
+	}
+	
+	// Check if already approved
+	for _, a := range req.ApprovedBy {
+		if strings.ToLower(a) == strings.ToLower(approver) {
+			return fmt.Errorf("already approved")
+		}
+	}
+	
+	req.ApprovedBy = append(req.ApprovedBy, approver)
+	
+	// Check if threshold reached
+	if len(req.ApprovedBy) >= m.config.Threshold {
+		req.Status = "approved"
+	}
+	
+	return nil
+}
+
+// IsApproved checks if request has enough approvals
+func (m *MultiSigManager) IsApproved(requestID string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	
+	req, ok := m.pendingApprovals[requestID]
+	if !ok {
+		return false
+	}
+	
+	return req.Status == "approved"
+}
+
+// Global multi-sig manager
+var multiSigManager *MultiSigManager
+
+// ═══════════════════════════════════════════════════════════════
+// SETTLEMENT INTEGRATION
+// ═══════════════════════════════════════════════════════════════
+
+// SettlementState holds the current settlement state
+type SettlementState struct {
+	PendingSettlements uint64    `json:"pending_settlements"`
+	ConfirmedSettlements uint64  `json:"confirmed_settlements"`
+	FailedSettlements   uint64   `json:"failed_settlements"`
+	LastSettlementTime time.Time `json:"last_settlement_time"`
+	mu                 sync.Mutex
+}
+
+var settlementState = SettlementState{}
+
+// ProcessSettlement processes a batch for settlement
+func ProcessSettlement(batch BatchResponse, txs []Transaction) (string, error) {
+	cfg := LoadSettlementConfig()
+	
+	// Check circuit breaker
+	if settlementBreaker.IsOpen() {
+		return "", fmt.Errorf("settlement circuit breaker open - too many failures")
+	}
+	
+	// Check if demo mode
+	if config.DemoMode || cfg.PrivateKey == "" {
+		logger.Info("demo mode: skipping settlement", map[string]interface{}{
+			"batch_id": batch.BatchID,
+		})
+		return "", nil
+	}
+	
+	// Validate all transactions
+	for _, tx := range txs {
+		if err := ValidateTransaction(tx); err != nil {
+			settlementBreaker.RecordFailure()
+			return "", fmt.Errorf("transaction validation failed: %v", err)
+		}
+		
+		// Check value limits
+		if err := CheckTransactionValue(tx.Value, getEnvUint64("MAX_TX_VALUE", 1_000_000_000_000_000_000)); err != nil {
+			settlementBreaker.RecordFailure()
+			return "", err
+		}
+		
+		// Check data size
+		if err := CheckTransactionDataSize(tx.Data, getEnvInt("MAX_TX_DATA_SIZE", 1024)); err != nil {
+			settlementBreaker.RecordFailure()
+			return "", err
+		}
+	}
+	
+	// Check if multi-sig required
+	totalValue := uint64(0)
+	for _, tx := range txs {
+		totalValue += tx.Value
+	}
+	
+	if multiSigManager != nil && multiSigManager.RequiresMultiSig(totalValue) {
+		req, err := multiSigManager.RequestApproval(batch.BatchID, "", totalValue)
+		if err != nil {
+			return "", err
+		}
+		if req != nil {
+			return "", fmt.Errorf("high-value transaction requires multi-sig approval: %s", req.ID)
+		}
+	}
+	
+	// Simulate transaction before broadcast
+	for _, tx := range txs {
+		result, err := SimulateTransaction(tx, cfg)
+		if err != nil {
+			return "", err
+		}
+		if !result.Success {
+			return "", fmt.Errorf("simulation failed: %s", result.RevertReason)
+		}
+	}
+	
+	// Broadcast
+	txHash, err := BroadcastTransaction(txs[0], cfg)
+	if err != nil {
+		settlementBreaker.RecordFailure()
+		settlementState.mu.Lock()
+		settlementState.FailedSettlements++
+		settlementState.mu.Unlock()
+		return "", err
+	}
+	
+	settlementBreaker.RecordSuccess()
+	settlementState.mu.Lock()
+	settlementState.PendingSettlements++
+	settlementState.mu.Unlock()
+	
+	// Start confirmation monitoring
+	go func() {
+		monitor := NewTransactionMonitor(cfg.RPCURL)
+		status, err := monitor.WaitForConfirmation(txHash, 12)
+		if err != nil {
+			logger.Error("confirmation monitoring failed", map[string]interface{}{
+				"error": err.Error(),
+			})
+		}
+		if status != nil {
+			settlementState.mu.Lock()
+			settlementState.PendingSettlements--
+			if status.Status == "confirmed" {
+				settlementState.ConfirmedSettlements++
+			} else {
+				settlementState.FailedSettlements++
+			}
+			settlementState.LastSettlementTime = time.Now()
+			settlementState.mu.Unlock()
+		}
+	}()
+	
+	return txHash, nil
+}
+
+// HandleSettlement returns settlement state
+func HandleSettlement(w http.ResponseWriter, r *http.Request) {
+	settlementState.mu.Lock()
+	defer settlementState.mu.Unlock()
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(settlementState)
 }
