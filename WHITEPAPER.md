@@ -31,7 +31,7 @@ BrixaScaler uses a **two-layer + settlement** architecture to achieve high throu
 ├─────────────────────────────────────────────────────────────────┤
 │  Input: ~2.85M TPS raw transactions (benchmarked on M4)   │
 │  Process: Hash → Build Merkle Tree → Create batch root        │
-│  Output: 337K batches/sec (1000 txs/batch)                │
+│  Output: 800 batches/sec (1000 txs/batch)                │
 │  Speed: Sub-millisecond (CPU only, no gas)                    │
 │  Cost: $0.000001 per transaction                              │
 └─────────────────────────────────────────────────────────────────┘
@@ -53,8 +53,8 @@ BrixaScaler uses a **two-layer + settlement** architecture to achieve high throu
 ├─────────────────────────────────────────────────────────────────┤
 │  Input: ~4,000 batch roots/sec                                 │
 │  Process: Generate ZK proof for each merkle root               │
-│  Benchmark: ~337K TPS                         │
-│  Output: ~337K TPS                                 │
+│  Benchmark: ~800 TPS                         │
+│  Output: ~800 TPS                                 │
 │  Cost: CPU only (no gas)                                      │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -62,7 +62,7 @@ BrixaScaler uses a **two-layer + settlement** architecture to achieve high throu
 **What happens here:**
 1. Each batch root gets a ZK proof generated
 2. The proof proves "this batch of transactions is valid"
-3. 337K TPS proofs generated per second
+3. 800 TPS proofs generated per second
 4. Proofs aggregated via recursive proving for efficient settlement
 
 ## Settlement Layer (L1/L2 Blockchain)
@@ -93,7 +93,7 @@ User Action (2.8M TPS)
 ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
 │   BATCHING   │ ──→ │     ZK       │ ──→ │  SETTLEMENT  │
 │    LAYER     │     │    LAYER     │     │    LAYER     │
-│  2.8M TPS   │     │  337K TPS    │     │   1 tx for 10M txs    │
+│  2.8M TPS   │     │  800 TPS    │     │   1 tx for 10M txs    │
 └──────────────┘     └──────────────┘     └──────────────┘
    (1000 txs)           (ZK proof)        (1 tx for 10M txs)
 ```
@@ -102,9 +102,9 @@ User Action (2.8M TPS)
 
 | Stage | Input TPS | Output TPS | Batching |
 |-------|-----------|------------|----------|
-| **Batching** | 2.85M | 337K| 1000 txs/batch |
-| **ZK** | 3,400 | 337K TPS | 1 root = 1 proof |
-| **Settlement** | 337K TPS | 1 tx/10M | 1 tx for 10M txs |
+| **Batching** | 2.85M | 800| 1000 txs/batch |
+| **ZK** | 3,400 | 800 TPS | 1 root = 1 proof |
+| **Settlement** | 800 TPS | 1 tx/10M | 1 tx for 10M txs |
 
 > **Benchmarked on Apple M4 (10-core):** 10M transactions in 0.8s = 2.8M TPS sustained. Peak: 12.8M TPS.
 
@@ -113,7 +113,7 @@ User Action (2.8M TPS)
 | Layer | What It Does | TPS | Cost | Handles |
 |-------|--------------|-----|------|---------|
 | **Batching** | Hash + Merkle root | ~2.85M | Near-zero | Game moves, AI calls, clicks |
-| **ZK** | Generate cryptographic proof | ~337K TPS | CPU only | Prove batch validity |
+| **ZK** | Generate cryptographic proof | ~800 TPS | CPU only | Prove batch validity |
 | **Settlement** | Submit to blockchain | 1 tx/10M | $0.01-0.10/tx | Money, assets, ownership |
 
 **The key insight:** You don't need blockchain for every action. You only need it when settling. This is like a restaurant - orders come in fast (2.8M actions), checks are settled later (1 tx for 10M txs). The player feels instant. The blockchain sees security.
@@ -134,7 +134,7 @@ The current code uses **real ZK proofs** to validate the batching layer independ
 For production, we recommend a **recursive proving** strategy:
 
 ```
-337K TPS batched
+800 TPS batched
     ↓
 Circuit A: Verify 1 batch (1000 txs) → 1 proof
     ↓ 
@@ -150,13 +150,13 @@ Settlement: 1 tiny proof (~10-20KB calldata) ✅
 | Stage | Input | Output | Notes |
 |-------|-------|--------|-------|
 | Raw TPS | 2.8M TPS | - | User transactions |
-| Batching | 2.8M | 337K batches/sec | 1000 txs/batch |
-| Batch Proofs | 337K| 337K proofs/sec | 1 proof per batch |
-| Recursive Stage 1 | 337K| 337K TPS | 1000:1 aggregation |
+| Batching | 2.8M | 800 batches/sec | 1000 txs/batch |
+| Batch Proofs | 800| 800 proofs/sec | 1 proof per batch |
+| Recursive Stage 1 | 800| 800 TPS | 1000:1 aggregation |
 | Recursive Stage 2 | 15 | 1 tx/10M | 1000:1 aggregation |
 | **Settlement** | 1 | 1 tx/sec | L1/L2 submission |
 
-**Headroom:** We have 337K TPS ZK capacity - verified
+**Headroom:** We have 800 TPS ZK capacity - verified
 
 ## Circuit Complexity Estimates
 
@@ -172,7 +172,7 @@ For a production circuit verifying batch validity:
 
 At 10M constraints per batch circuit:
 - Single proof time: ~0.06ms (with GPU acceleration)
-- Throughput: ~337K TPS proofs/sec (well above 500 needed)
+- Throughput: ~800 TPS proofs/sec (well above 500 needed)
 
 ## Gas Costs (Settlement)
 
@@ -340,7 +340,7 @@ Step 3: Player gets real on-chain NFT ownership
 
 Traditional L2s require bridging funds, deploying to a new network, and trusting different infrastructure. BrixaScaler offers a different tradeoff: keep your existing chain infrastructure, add middleware for high-speed ingestion, and settle back to the same chain.
 
-**No bridge required** — but proving verified at 337K TPS.
+**No bridge required** — but proving verified at 800 TPS.
 
 ## Comparison
 
@@ -352,7 +352,7 @@ Traditional L2s require bridging funds, deploying to a new network, and trusting
 | Trust New Network | **No** | Yes |
 | Chain Agnostic | Yes | No |
 | ZK Privacy | Yes | Rarely |
-| Proving Throughput | 337K TPS | Varies |
+| Proving Throughput | 800 TPS | Varies |
 | End-to-End Latency | Minutes to hours | Seconds to minutes |
 
 ---
@@ -366,12 +366,12 @@ Player/Agent Action
         ↓
   Batch + Merkle Tree
         ↓
-  ZK Proof Generation ← 337K TPSond
+  ZK Proof Generation ← 800 TPSond
         ↓
    Settlement Chain ← 1 tx for 10M txs
 ```
 
-**Note:** The Go layer (2.8M TPS) is not the bottleneck. ZK proving (337K TPS) is the real bottleneck. This is architecturally correct — fast ingestion, slow proving, periodic settlement.
+**Note:** The Go layer (2.8M TPS) is not the bottleneck. ZK proving (800 TPS) is the real bottleneck. This is architecturally correct — fast ingestion, slow proving, periodic settlement.
 
 ---
 
