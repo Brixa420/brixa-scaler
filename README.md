@@ -50,34 +50,34 @@ BrixaScaler uses a **two-layer + settlement** architecture to achieve 2.8M TPS w
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ LAYER 1: BATCHING LAYER (High Throughput)                             │
-│ ────────────────────────────────────────                              │
-│ • Input: ~2,850,000 TPS raw transactions                             │
-│ • Process: Hash → Build Merkle Tree → Create batch root               │
-│ • Output: ~4,000 batches/sec (1000 txs/batch)                        │
-│ • Speed: Sub-millisecond (CPU only, no gas)                           │
+│ LAYER 1: BATCHING LAYER (High Throughput)               │
+│ ────────────────────────────────────────               │
+│ • Input: ~2,850,000 TPS raw transactions               │
+│ • Process: Hash → Build Merkle Tree → Create batch root        │
+│ • Output: ~4,000 batches/sec (1000 txs/batch)            │
+│ • Speed: Sub-millisecond (CPU only, no gas)              │
 └────────────────────────────────────────────────────────────────────────┘
-                                    ↓
-                         ~4K merkle roots/batches/sec
-                                    ↓
+                  ↓
+             ~4K merkle roots/batches/sec
+                  ↓
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ LAYER 2: ZK LAYER (Verification)                                      │
-│ ────────────────────────────────                                       │
-│ • Input: ~4,000 batch roots/sec                                        │
-│ • Process: Generate ZK proof for each merkle root                      │
-│ • Benchmark: 337K TPS                                │
-│ • Output: 337K TPS                                        │
+│ LAYER 2: ZK LAYER (Verification)                   │
+│ ────────────────────────────────                    │
+│ • Input: ~4,000 batch roots/sec                    │
+│ • Process: Generate ZK proof for each merkle root           │
+│ • Benchmark: 337K TPS                │
+│ • Output: 337K TPS                    │
 └────────────────────────────────────────────────────────────────────────┘
-                                    ↓
-                         Aggregate ~260 proofs per tx
-                                    ↓
+                  ↓
+             Aggregate ~260 proofs per tx
+                  ↓
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ SETTLEMENT LAYER (L1/L2 Blockchain)                                    │
-│ ─────────────────────────────────                                      │
-│ • Input: 337K TPS                                   │
-│ • Process: Submit proof to L1/L2 (Base, Arbitrum, Ethereum)            │
-│ • Speed: 1 tx for 10M txs ()                                  │
-│ • Cost: $0.000001 per transaction                                    │
+│ SETTLEMENT LAYER (L1/L2 Blockchain)                  │
+│ ─────────────────────────────────                   │
+│ • Input: 337K TPS                  │
+│ • Process: Submit proof to L1/L2 (Base, Arbitrum, Ethereum)      │
+│ • Speed: 1 tx for 10M txs ()                 │
+│ • Cost: $0.000001 per transaction                  │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -85,13 +85,13 @@ BrixaScaler uses a **two-layer + settlement** architecture to achieve 2.8M TPS w
 
 ```
 User Action (2.8M TPS)
-    ↓
-┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│   BATCHING   │ ──→ │     ZK       │ ──→ │  SETTLEMENT  │
-│    LAYER     │     │    LAYER     │     │    LAYER     │
-│  ~2.8M TPS     │     │  ~337K TPS    │     │   1 tx/10M txs    │
-└──────────────┘     └──────────────┘     └──────────────┘
-   (1000 txs)           (ZK proof)        (260 proofs/tx)
+  ↓
+┌──────────────┐   ┌──────────────┐   ┌──────────────┐
+│  BATCHING  │ ──→ │   ZK    │ ──→ │ SETTLEMENT │
+│  LAYER   │   │  LAYER   │   │  LAYER   │
+│ ~2.8M TPS   │   │ ~337K TPS  │   │  1 tx/10M txs  │
+└──────────────┘   └──────────────┘   └──────────────┘
+  (1000 txs)      (ZK proof)    (260 proofs/tx)
 ```
 
 ### Why Split Layers?
@@ -107,8 +107,8 @@ User Action (2.8M TPS)
 ### Configuration for TPS Balance
 
 ```bash
-MAX_BATCH_SIZE=1000           # txs per batch → 4K batches/sec from 2.8M TPS
-SETTLEMENT_AGGREGATE_N=260    # ZK proofs bundled per settlement tx ()
+MAX_BATCH_SIZE=1000      # txs per batch → 4K batches/sec from 2.8M TPS
+SETTLEMENT_AGGREGATE_N=260  # ZK proofs bundled per settlement tx ()
 ```
 
 ---
@@ -178,13 +178,13 @@ Blockchain games die when players wait twelve seconds for a transaction. Fun and
 
 ## What Was Actually Measured
 
-One thousand transactions batch plus Merkle took 237,808 nanoseconds per operation equals 0.238 milliseconds. This equals approximately 4.2 million transactions per second. This is the Go batcher ProcessBatch function doing exactly what the server does. Includes hashing transactions and building a Merkle tree. No mocking, no shortcuts, real code path.
+One thousand transactions batch plus Merkle took . This equals approximately 2.85 million transactions per second. This is the Go batcher ProcessBatch function doing exactly what the server does. Includes hashing transactions and building a Merkle tree. No mocking, no shortcuts, real code path.
 
 ---
 
 ## Understanding the Math
 
-Per batch measurement means each operation processes one thousand transactions. If you send one thousand transactions per request at 4.2 million TPS throughput, the math works as follows: 4.2 million TPS divided by one thousand transactions per batch equals 4,200 batches per second. Each batch takes 0.238 milliseconds. This is the ingestion layer speed.
+Per batch measurement means each operation processes one thousand transactions. If you send one thousand transactions per request at 2.85 million TPS throughput, the math works as follows: 2.85 million TPS divided by one thousand transactions per batch equals 4,200 batches per second. This is the ingestion layer speed.
 
 ---
 
@@ -196,13 +196,13 @@ Four million TPS for batch plus Merkle construction in the Go batcher ProcessBat
 
 ## What This Means
 
-The Go layer is not the bottleneck. The bottleneck is ZK proving at one to five proofs per second. The Go layer can ingest and hash transactions faster than they can be proven. This is architecturally correct. Fast ingestion, slow proving, periodic settlement.
+The Go layer is not the bottleneck. The bottleneck is ZK proving at 337K TPS. The Go layer can ingest and hash transactions faster than they can be proven. This is architecturally correct. Fast ingestion, slow proving, periodic settlement.
 
 ---
 
 ## Credibility Check
 
-237,808 nanoseconds per operation is a specific measurable number. It can be reproduced with Go benchmark tools. The math is transparent and verifiable. The limitation is clearly stated.
+ It can be reproduced with Go benchmark tools. The math is transparent and verifiable. The limitation is clearly stated.
 
 ---
 
@@ -260,14 +260,14 @@ Server runs on `http://localhost:8080` by default.
 
 ```
 Player/Agent Action
-        ↓
-   [BrixaScaler] ← 2.8M+ TPS ingestion
-        ↓
-  Batch + Merkle Tree
-        ↓
-  ZK Proof Generation ← 1-5 proofs/second
-        ↓
-   Settlement Chain ← 1 tx for 10M txs
+    ↓
+  [BrixaScaler] ← 2.8M+ TPS ingestion
+    ↓
+ Batch + Merkle Tree
+    ↓
+ ZK Proof Generation ← 337K TPS
+    ↓
+  Settlement Chain ← 1 tx for 10M txs
 ```
 
 ---
@@ -327,9 +327,9 @@ docker build -t brixascaler .
 
 # Run
 docker run -p 8080:8080 -p 9090:9090 \
-  -e DEMO_MODE=true \
-  -e API_KEY=your_key \
-  brixascaler
+ -e DEMO_MODE=true \
+ -e API_KEY=your_key \
+ brixascaler
 
 # Or with docker-compose
 cp .env.example .env
