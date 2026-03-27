@@ -191,9 +191,9 @@ Benchmarked on Mac Mini M4 ten core Apple Silicon. Parallel sharding architectur
 
 Same code on server hardware equals ten million plus TPS. Distributed across multiple machines equals hundred million plus TPS. The limit is your infrastructure budget, not our software.
 
-This is credible because the number is specific and verified. The scaling claim is backed by architecture not marketing. Enterprises understand paying for hardware to get performance.
 
-This is valuable because it shifts the conversation from does it scale to how much do you want to spend.
+---
+
 
 ---
 
