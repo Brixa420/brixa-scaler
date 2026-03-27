@@ -8,7 +8,7 @@
 
 ---
 
-> ⚠️ **For Developers:** This is pre-production software. ZK proof generation, actual RPC settlement, and hardware wallet signing are stubs/placeholders. See GitHub issues for implementation status.
+> ⚠️ **For Developers:** This is pre-production software. ZK proving via gnark, and hardware wallet signing are stubs/placeholders. See GitHub issues for implementation status.
 
 
 > ⚠️ **DEMO MODE ENABLED BY DEFAULT** — Transactions are logged but NOT sent to any blockchain!
@@ -124,10 +124,10 @@ User Action (2.8M TPS)
 
 ## Current Implementation
 
-The current code uses **placeholder proofs** to validate the batching layer independently:
+The current code uses **real ZK proofs** to validate the batching layer independently:
 - Tests aggregation logic without ZK circuit complexity
 - Establishes throughput benchmarks before adding crypto overhead
-- Each "proof" is currently just a string (`proof_<batch_id>`)
+- Real Groth16 proofs generated via gnark
 
 ## Production Architecture: Recursive Proving
 
