@@ -521,164 +521,102 @@ if (cluster.isMaster) {
     💜 Built by Laura Wolf (Brixa420) + Elara AI 🧸💖
   </div>
 </body>
-</html>
-    `);
-  });
-
-  server.listen(CONFIG.port, () => {
-    console.log('');
-    console.log('🌟 HORIZONTALLY SCALED ROLLUP ONLINE');
-    console.log('═'.repeat(60));
-    console.log(`   📡 Wallet RPC: http://localhost:${CONFIG.port}`);
-    console.log(`   🌐 Dashboard:  http://localhost:${CONFIG.port}`);
-    console.log(`   👷 Workers:    ${CONFIG.workers} processes`);
-    console.log(`   🔀 Shards:     ${CONFIG.workers * CONFIG.shards} total`);
-    console.log('');
-    console.log('🔮 The chain won\'t know what hit it...');
-    console.log('');
-  });
-
-  // Forward RPC to workers (round-robin)
-  let currentWorker = 0;
-  server.on('request', (req, res) => {
-    // Only GET requests (dashboard) handled here
-  });
-
-  // Actually we need a separate RPC server
-  const rpcServer = http.createServer(async (req, res) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-    if (req.method === 'OPTIONS') return res.end();
-
-    if (req.method !== 'POST') {
-      res.writeHead(405);
-      res.end(JSON.stringify({ error: 'Method not allowed' }));
-      return;
-    }
-
-    let body = '';
-    req.on('data', c => body += c);
-    req.on('end', () => {
-      // Round-robin to workers via IPC
-      const workerIndex = currentWorker % workers.length;
-      currentWorker++;
-      
-      workers[workerIndex].send({ type: 'tx', data: body });
-      
-      // In demo mode, just respond immediately
-      res.end(JSON.stringify({ 
-        jsonrpc: '2.0', 
-        id: JSON.parse(body).id, 
-        result: '0x' + crypto.randomBytes(8).toString('hex') 
-      }));
-    });
-  });
-
-  rpcServer.listen(CONFIG.port + 1, () => {
-    console.log(`   📡 RPC Server: http://localhost:${CONFIG.port + 1}`);
-  });
-
-  // Proof API endpoint (for sequencer to fetch batches)
-  const proofServer = http.createServer(async (req, res) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Content-Type', 'application/json');
-    
-    const url = new URL(req.url, 'http://localhost');
-    
-    // GET /proof - Get latest proof for L1 submission
-    if (url.pathname === '/proof' && req.method === 'GET') {
-      const proofData = pendingProofs.shift();
-      if (proofData) {
-        res.end(JSON.stringify({ success: true, proof: proofData }));
-      } else {
-        res.end(JSON.stringify({ success: false, error: 'No proofs available' }));
-      }
-      return;
-    }
-    
-    // GET /state - Get current state root
-    if (url.pathname === '/state' && req.method === 'GET') {
-      res.end(JSON.stringify({
-        stateRoot: currentStateRoot,
-        batchCount: batchCount,
-        pendingProofs: pendingProofs.length
-      }));
-      return;
-    }
-    
-    // POST /tx - Submit transaction
-    if (url.pathname === '/tx' && req.method === 'POST') {
-      let body = '';
-      req.on('data', c => body += c);
-      req.on('end', () => {
-        const workerIndex = currentWorker % workers.length;
-        currentWorker++;
-        workers[workerIndex].send({ type: 'tx', data: body });
-        res.end(JSON.stringify({ 
-          jsonrpc: '2.0', 
-          id: JSON.parse(body).id, 
-          result: '0x' + crypto.randomBytes(8).toString('hex') 
-        }));
-      });
-      return;
-    }
-    
-    res.writeHead(404);
-    res.end(JSON.stringify({ error: 'Not found' }));
-  });
-
-  // Store pending proofs for sequencer
-  const pendingProofs = [];
-  let currentStateRoot = '0x' + '0'.repeat(64);
-  let batchCount = 0;
-
-  proofServer.listen(CONFIG.port + 2, () => {
-    console.log(`   🔗 Proof API: http://localhost:${CONFIG.port + 2} (for sequencer)`);
-  });
-
-} else {
-  // ============================================
-  // WORKER PROCESS
-  // ============================================
   
-  const workerId = parseInt(process.env.WORKER_ID);
-  const rpcUrl = process.env.RPC_URL;
-  const shards = parseInt(process.env.SHARDS);
-  const batchSize = parseInt(process.env.BATCH_SIZE);
-  const batchInterval = parseInt(process.env.BATCH_INTERVAL);
-  const demoMode = process.env.DEMO_MODE !== 'false';
+  <div style="margin-top:40px;padding:20px;background:rgba(255,255,255,0.05);border-radius:12px;">
+    <h3 style="color:#00f5d4;margin-bottom:15px;">How It Works</h3>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <div style="background:#ff2d75;padding:10px 15px;border-radius:8px;">1. Your App</div>
+      <div style="color:#666;">→</div>
+      <div style="background:#ff2d75;padding:10px 15px;border-radius:8px;">2. BrixaRoll (off-chain)</div>
+      <div style="color:#666;">→</div>
+      <div style="background:#ff2d75;padding:10px 15px;border-radius:8px;">3. Batch + ZK Proof</div>
+      <div style="color:#666;">→</div>
+      <div style="background:#ff2d75;padding:10px 15px;border-radius:8px;">4. Chain (1 tx)</div>
+    </div>
+    <p style="margin-top:15px;color:#888;font-size:0.9em;">
+      Instead of 1M transactions hitting the chain, BrixaRoll batches them off-chain, 
+      generates a ZK proof, and submits ONE transaction with the proof. 
+      Chain sees 1 tx, but 1M executed.
+    </p>
+  </div>
   
-  // Override config
-  CONFIG.shards = shards;
-  CONFIG.batchSize = batchSize;
-  CONFIG.batchInterval = batchInterval;
-  CONFIG.demoMode = demoMode;
+  <div style="margin-top:20px;padding:20px;background:rgba(0,245,212,0.1);border-radius:12px;border:1px solid #00f5d4;">
+    <h3 style="color:#00f5d4;margin-bottom:10px;">Quick Demo</h3>
+    <p style="color:#aaa;margin-bottom:15px;">Send test transactions:</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <button onclick="sendTest()" style="background:#00f5d4;color:#000;padding:12px 24px;border:none;border-radius:8px;cursor:pointer;font-weight:bold;">
+        Send 1 Transaction
+      </button>
+      <button onclick="sendBatch()" style="background:#ff2d75;color:#fff;padding:12px 24px;border:none;border-radius:8px;cursor:pointer;font-weight:bold;">
+        Send 1,000 Txs
+      </button>
+      <button onclick="sendStress()" style="background:#e94560;color:#fff;padding:12px 24px;border:none;border-radius:8px;cursor:pointer;font-weight:bold;">
+        Stress Test (10K)
+      </button>
+    </div>
+    <pre id="demoOutput" style="margin-top:15px;background:#000;padding:15px;border-radius:8px;overflow-x:auto;font-size:0.85em;color:#0f0;"></pre>
+  </div>
   
-  const worker = new Worker(workerId, rpcUrl);
-  
-  console.log(`   [Worker ${workerId}] ✅ Ready with ${shards} shards`);
-  
-  // Handle messages from master
-  process.on('message', (msg) => {
-    if (msg.type === 'tx') {
+  <script>
+    async function sendTest() {
+      const output = document.getElementById('demoOutput');
+      output.textContent = 'Sending test transaction...';
       try {
-        const tx = JSON.parse(msg.data).params?.[0];
-        if (tx) worker.queue(tx);
-      } catch (e) {}
+        const tx = await fetch('/rpc', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            method: 'eth_sendTransaction',
+            params: [{from: '0x742d35Cc6634C0532925a3b844Bc9e7595f0fEa1', to: '0xABC...', value: '0x1'}],
+            id: 1
+          })
+        }).then(r => r.json());
+        output.textContent = 'Transaction queued!\\n' + JSON.stringify(tx, null, 2);
+      } catch(e) {
+        output.textContent = 'Error: ' + e.message;
+      }
     }
-  });
-  
-  // Report stats every 5 seconds
-  setInterval(() => {
-    const stats = worker.getStats();
-    process.send({ type: 'stats', workerId, ...stats });
-    // Report any pending proofs
-    if (worker.pendingProof) {
-      process.send({ type: 'proof', proof: worker.pendingProof });
-      worker.pendingProof = null;
+    async function sendBatch() {
+      const output = document.getElementById('demoOutput');
+      output.textContent = 'Sending batch of 1,000 transactions...';
+      const txs = [];
+      for(let i=0; i<1000; i++) {
+        txs.push({from: '0x742d35Cc6634C0532925a3b844Bc9e7595f0fEa1', to: '0xABC...', value: '0x1'});
+      }
+      try {
+        const res = await fetch('/batch', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(txs)
+        }).then(r => r.json());
+        output.textContent = 'Batch queued!\\n' + JSON.stringify(res, null, 2);
+      } catch(e) {
+        output.textContent = 'Error: ' + e.message;
+      }
     }
-  }, 5000);
-}
-
-module.exports = { Worker, Shard, ZKProver, CONFIG };
+    async function sendStress() {
+      const output = document.getElementById('demoOutput');
+      output.textContent = 'Sending 10,000 transactions...';
+      const batches = [];
+      for(let b=0; b<10; b++) {
+        const txs = [];
+        for(let i=0; i<1000; i++) {
+          txs.push({from: '0x742d35Cc6634C0532925a3b844Bc9e7595f0fEa1', to: '0xABC...', value: '0x1'});
+        }
+        batches.push(fetch('/batch', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(txs)
+        }));
+      }
+      try {
+        const res = await Promise.all(batches);
+        output.textContent = 'Stress test complete! 10,000 txs queued.';
+      } catch(e) {
+        output.textContent = 'Error: ' + e.message;
+      }
+    }
+  </script>
+</body>
+</html>
