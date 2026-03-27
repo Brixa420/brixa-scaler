@@ -19,11 +19,11 @@
 
 ---
 
-# 🏗️ Architecture: Two Layers, Two Speeds
+# 🏗️ Architecture: Actions vs Settlement
 
-BrixaScaler is designed as a **Layer 3/4 batching infrastructure**. We separate the fast ingestion from the secure settlement.
+BrixaScaler is designed as a **Layer 3/4 batching infrastructure**. We separate the fast actions from the secure settlement.
 
-## Layer 1: Batching Layer (~3.7M TPS)
+## Layer 1: Batching Layer (Actions)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -31,52 +31,50 @@ BrixaScaler is designed as a **Layer 3/4 batching infrastructure**. We separate 
 ├─────────────────────────────────────────────────────────────────┤
 │  Your App/API → Hash Transactions → Batch in Memory           │
 │                                                                 │
-│  TPS: ~3,700,000                                              │
+│  TPS: ~4,000,000                                              │
 │  Latency: <1 millisecond                                      │
 │  Cost: $0.000001 per transaction (CPU only)                  │
-│  Security: Receipts (not yet on-chain)                        │
+│  Handles: Game moves, AI calls, clicks, interactions          │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 **What happens here:**
-1. Your app sends transactions to BrixaScaler
-2. Each transaction is SHA256 hashed (parallel, multi-core)
-3. Transactions are batched in memory
+1. Your app sends actions to BrixaScaler
+2. Each action is SHA256 hashed (parallel, multi-core)
+3. Actions are batched in memory
 4. A "receipt" is returned immediately (not yet on-chain)
-5. No gas, no wait, no blockchain contact
+5. No gas, no wait, no blockchain contact - instant!
 
-## Layer 2: ZK Settlement Layer
+## Layer 2: Settlement Layer (Blockchain)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                   ZK SETTLEMENT LAYER                          │
+│                   SETTLEMENT LAYER                             │
 ├─────────────────────────────────────────────────────────────────┤
 │  Batched Hashes → Merkle Tree → ZK Proof → L1/L2             │
 │                                                                 │
-│  TPS: ~17,000 (limited by merkle + proving)                   │
-│  Latency: 30-300 seconds                                      │
+│  TPS: 15-65 (L1: ~15, L2: ~65)                                │
+│  Latency: Minutes                                             │
 │  Cost: $0.01-0.10 per transaction                             │
-│  Security: ZK proof + on-chain verification                   │
+│  Handles: Money, assets, final ownership                      │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 **What happens here:**
 1. Every N batches (or time window), settlement triggers
-2. Merkle tree built from batch hashes (takes seconds)
+2. Merkle tree built from batch hashes
 3. ZK circuit generates proof "this batch is valid"
 4. Proof submitted to L1/L2 (Ethereum, Arbitrum, etc.)
-5. Transactions are now FINAL on the blockchain
+5. Transactions are now FINAL - real blockchain ownership!
 
-## Why Two Layers?
+## Why Split Layers?
 
-| Metric | Batching Layer | ZK Settlement |
-|--------|---------------|---------------|
-| **TPS** | 3,700,000 | ~17,000 |
-| **Latency** | <1ms | 30-300s |
-| **Cost/tx** | $0.000001 | $0.01-0.10 |
-| **Use Case** | Real-time actions (games, AI) | Final settlement |
+| What | Layer | TPS | Handles |
+|------|-------|-----|---------|
+| **Actions** | Batching | ~4,000,000 | Game moves, AI calls, interactions |
+| **Settlement** | L1/L2 | 15-65 | Money, assets, ownership |
 
-**The key insight:** You don't need ZK proofs for every player click. You only need them when settling to L1/L2. This is like a restaurant - orders come in fast, checks are settled later.
+**The key insight:** You don't need blockchain for every action. You only need it when settling. This is like a restaurant - orders come in fast (4M actions), checks are settled later (65 TPS). The player feels instant. The blockchain sees security.
 
 ---
 
@@ -126,7 +124,7 @@ Every time someone creates a new L2:
 
 What if you could:
 - Keep using **ANY** blockchain (Ethereum, Polygon, Arbitrum, etc.)
-- Get **3,700,000+ TPS** on transaction ingestion
+- Get **4,000,000+ TPS** on transaction ingestion
 - Pay **less than a cent** per thousand transactions
 - Prove **correctness** with ZK proofs without revealing data
 - **Never bridge** funds or trust new networks
@@ -178,7 +176,7 @@ BrixaScaler gives you a **fourth option**: build on our batching layer, settle t
 
 ### Why This Architecture Makes Sense
 
-1. **Massive throughput for your app** (3.7M TPS)
+1. **Massive throughput for your app** (4M TPS)
    - AI agents making millions of API calls
    - Games with hundreds of actions per second
    - DeFi with high-frequency trading
@@ -216,7 +214,7 @@ Step 3: Final cost: $0.11 for 1M actions
 ```
 Step 1: Player clicks 100 times/second
         ↓
-        All batched instantly on BrixaScaler (3.7M TPS capacity)
+        All batched instantly on BrixaScaler (4M TPS capacity)
         ↓
 Step 2: Every 10 seconds → batch settles to Polygon ($0.001)
         ↓
@@ -236,7 +234,7 @@ Traditional L2s require bridging funds, deploying to a new network, and trusting
 
 | Feature | BrixaScaler | Traditional L2 |
 |---------|-------------|----------------|
-| Ingestion TPS | 3,700,000 | 10,000 |
+| Ingestion TPS | 4,000,000 | 10,000 |
 | Setup Time | 5 minutes | Weeks |
 | Bridge Funds | **Never** | Always |
 | Trust New Network | **No** | Yes |
@@ -261,7 +259,7 @@ Player/Agent Action
    Settlement Chain ← 65 TPS verification
 ```
 
-**Note:** The Go layer (3.7M TPS) is not the bottleneck. ZK proving (1-5 proofs/sec) is the real bottleneck. This is architecturally correct — fast ingestion, slow proving, periodic settlement.
+**Note:** The Go layer (4M TPS) is not the bottleneck. ZK proving (1-5 proofs/sec) is the real bottleneck. This is architecturally correct — fast ingestion, slow proving, periodic settlement.
 
 ---
 
@@ -271,7 +269,7 @@ Player/Agent Action
 
 ```
 Batch + Merkle: 237,808 ns/op = 0.238 ms
-                 = ~3,700,000 transactions per second
+                 = ~4,000,000 transactions per second
 ```
 
 **What was measured:** 1,000 transactions batched with Merkle tree construction, ProcessBatch function, real code path, no mocking.
@@ -291,7 +289,7 @@ Batch + Merkle: 237,808 ns/op = 0.238 ms
 
 | Hardware | Result | Implication |
 |----------|--------|-------------|
-| Mac Mini M4 (10-core, $600) | 3.7M TPS ingestion | This is the floor, not the ceiling |
+| Mac Mini M4 (10-core, $600) | 4M TPS ingestion | This is the floor, not the ceiling |
 | Better hardware | Linear scaling | More cores = more shards = more TPS |
 | Server-grade hardware | 10M+ TPS likely | 64-core AMD EPYC, Intel Xeon |
 | Cloud instances | Auto-scaling | Kubernetes horizontal pod scaling |
@@ -300,7 +298,7 @@ Batch + Merkle: 237,808 ns/op = 0.238 ms
 
 | Current | Potential |
 |----------|-----------|
-| 3.7M TPS on Mac Mini M4 | 10M+ TPS on server hardware |
+| 4M TPS on Mac Mini M4 | 10M+ TPS on server hardware |
 | Single machine | Distributed across many machines |
 | 10-core parallelism | 64-core, 128-core, or more |
 

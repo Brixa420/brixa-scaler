@@ -44,43 +44,41 @@ The following features are **stubbed out or partially implemented** and need to 
 
 ---
 
-## 🏗️ Layered Architecture: Batching Layer vs ZK Settlement
+## 🏗️ Layered Architecture: Actions vs Settlement
 
 BrixaScaler is designed as a **Layer 3/4** batching infrastructure. Understanding the layers is critical for builders:
 
-### Layer 1: Ingestion/Batching Layer (This Software)
-- **Throughput:** 4.2+ million TPS
+### Layer 1: Batching Layer (Actions)
+- **Throughput:** ~4 million TPS
 - **What it does:** Hashes transactions in parallel, batches them in memory
 - **Speed:** Sub-millisecond latency
 - **Cost:** Near-zero (CPU only, no on-chain gas)
-- **Use case:** Your app builds HERE
+- **What it handles:** Game moves, AI inferences, social interactions, clicks, etc.
 
-### Layer 2: ZK Proof Layer
-- **What it does:** Generates cryptographic proof that the batch is valid
-- **Speed:** Seconds to minutes (ZK circuit computation)
-- **Cost:** Higher (ZK proving infrastructure)
-- **When:** Runs periodically (every N batches or time window)
+### Layer 2: Settlement Layer (Blockchain)
+- **What it does:** ZK proofs + on-chain settlement
+- **Speed:** 15-65 TPS (L1: ~15 TPS, L2: ~65 TPS)
+- **Cost:** $0.01-0.10 per transaction
+- **What it handles:** Money, assets, final ownership
 
 ### Why Split Layers?
 
-| Metric | Batching Layer | ZK Settlement |
-|--------|---------------|---------------|
-| TPS | ~3,700,000 | ~17,000 |
-| Latency | <1ms | 30-300s |
-| Cost per tx | $0.000001 | $0.01-0.10 |
-| Use case | Real-time actions | Final settlement |
+| What | Layer | TPS | Use Case |
+|------|-------|-----|----------|
+| **Actions** | Batching | ~4,000,000 | Game moves, AI calls, interactions |
+| **Settlement** | L1/L2 | 15-65 | Money, assets, ownership |
 
-**The key insight:** You don't need ZK proofs for every action. You only need them when you settle. This is like a restaurant - orders come in fast (batching), checks are settled later (ZK).
+**The key insight:** You don't need blockchain for every action. You only need it when settling. This is like a restaurant - orders come in fast (4M actions), checks are settled later (65 TPS). The player feels instant. The blockchain sees security.
 
 ---
 
 ## 🎯 Why Build on BrixaScaler's Batching Layer
 
-1. **Massive throughput** — 3.7M TPS handles AI agents, games, DeFi at Web2 speeds
-2. **Dramatically cheaper** — Ingest at $0.000001/tx, settle periodically at $0.01/tx
-3. **Settle to L2/L1** — Your users get real blockchain ownership on Ethereum, Arbitrum, Optimism, etc.
+1. **Web2 speed** — 4M actions TPS for instant gameplay, AI interactions
+2. **Web3 ownership** — Settle to L1/L2 for real blockchain assets
+3. **Dramatically cheaper** — 4M actions at $0.000001/tx, settle at $0.01/tx
 4. **ZK verified** — No trusted intermediary - cryptographic proof of batch validity
-5. **No app-chain fragmentation** — Single batching layer, multiple settlement targets
+5. **No app-chain fragmentation** — Single batching layer, any settlement chain
 
 ### Example: AI Agent Network
 ```
@@ -91,7 +89,7 @@ BrixaScaler is designed as a **Layer 3/4** batching infrastructure. Understandin
 
 ### Example: Blockchain Game
 ```
-1. Player clicks 100 times/second → all batched locally (3.7M TPS)
+1. Player clicks 100 times/second → all batched locally (4M TPS)
 2. Every 10 seconds → batch settles to Polygon → $0.001
 3. Player gets real on-chain ownership periodically
 4. Result: Instant gameplay + real assets = best of both worlds
