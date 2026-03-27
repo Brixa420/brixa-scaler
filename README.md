@@ -112,7 +112,6 @@ go build -o brixascaler server.go
 ```
 
 Server runs on `http://localhost:8080` by default.
-Server runs on `http://localhost:8080` by default.
 
 ### Endpoints
 - `POST /batch` — Submit a batch of transactions
