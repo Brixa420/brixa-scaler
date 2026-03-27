@@ -167,7 +167,7 @@ Blockchain games die when players wait twelve seconds for a transaction. Fun and
 **The Win:** AI teams get Web2-speed economics with Web3-verifiability. Agents act fast, settle slow, stay honest.
 
 ### For Gaming Teams
-- **Real-time actions** — Four million TPS ingestion equals instant item pickups, movement, combat. Players do not wait.
+- **Real-time actions** — Millions of TPS ingestion equals instant item pickups, movement, combat. Players do not wait.
 - **Asset ownership** — Periodic ZK settlement means players actually own items on Ethereum. They do own their stuff.
 - **Economy integrity** — Cryptographic receipts that prove the game was fair
 - **Cross-game items** — Settle to any chain, player takes sword from Polygon game to Ethereum game
@@ -190,7 +190,7 @@ Per batch measurement means each operation processes one thousand transactions. 
 
 ## Honest Claim
 
-Four million TPS for batch plus Merkle construction in the Go batcher ProcessBatch function. Each batch contains one thousand transactions. Network input output, serialization, and ZK proving are separate bottlenecks that limit real world end to end throughput.
+Millions of TPS for batch plus Merkle construction in the Go batcher ProcessBatch function. Each batch contains one thousand transactions. Network input output, serialization, and ZK proving are separate bottlenecks that limit real world end to end throughput.
 
 ---
 
