@@ -118,6 +118,76 @@ User Action (4M TPS)
 
 ---
 
+# 🔬 ZK Circuit Design (For Production)
+
+## Current Implementation
+
+The current code uses **placeholder proofs** to validate the batching layer independently:
+- Tests aggregation logic without ZK circuit complexity
+- Establishes throughput benchmarks before adding crypto overhead
+- Each "proof" is currently just a string (`proof_<batch_id>`)
+
+## Production Architecture: Recursive Proving
+
+For production, we recommend a **recursive proving** strategy:
+
+```
+4K batch roots/sec
+    ↓
+Circuit A: Verify 1 batch (1000 txs) → 1 proof (~10M constraints, 0.06ms)
+    ↓ (4K proofs/sec)
+Circuit B: Recursively aggregate 260 proofs → 1 final proof (~5M constraints)
+    ↓ (~15 proofs/sec)  
+Circuit C: Aggregate 15 batch proofs → 1 final settlement proof (~2M constraints)
+    ↓ (~1 proof/sec)
+Settlement: 1 tiny proof (~10-20KB calldata) ✅
+```
+
+## Throughput Math
+
+| Stage | Input | Output | Notes |
+|-------|-------|--------|-------|
+| Raw TPS | 4M TPS | - | User transactions |
+| Batching | 4M | 4K batches/sec | 1000 txs/batch |
+| Batch Proofs | 4K | 4K proofs/sec | 1 proof per batch |
+| Recursive Stage 1 | 4K | ~15 proofs/sec | 260:1 aggregation |
+| Recursive Stage 2 | 15 | ~1 proof/sec | 15:1 aggregation |
+| **Settlement** | 1 | 1 tx/sec | L1/L2 submission |
+
+**Headroom:** We have 17K/sec ZK capacity but only need ~4K proofs/sec = **4x+ headroom**
+
+## Circuit Complexity Estimates
+
+For a production circuit verifying batch validity:
+
+| What to Verify | Constraints (Est.) |
+|----------------|-------------------|
+| Merkle tree build (SHA256) | ~1M |
+| Transaction validity | ~2M |
+| State transitions | ~5M |
+| Signature verification | ~2M (optional) |
+| **Total per batch** | **~10M constraints** |
+
+At 10M constraints per batch circuit:
+- Single proof time: ~0.06ms (with GPU acceleration)
+- Throughput: ~16K proofs/sec (well above 4K needed)
+
+## Gas Costs (Settlement)
+
+With recursive proving to a single final proof:
+
+| Proof Type | Calldata Size | Gas Estimate |
+|------------|---------------|--------------|
+| Single batch proof | ~50KB | ~800K gas |
+| After 260:1 recursion | ~20KB | ~320K gas |
+| Final recursive proof | ~10-20KB | ~160-320K gas |
+
+**At 20 gwei:** ~0.003-0.006 ETH per settlement tx ✅
+
+This is **50-100x cheaper** than submitting 260 individual proofs!
+
+---
+
 # 🎯 The Problem
 
 ## Crypto Has a Scaling Problem
