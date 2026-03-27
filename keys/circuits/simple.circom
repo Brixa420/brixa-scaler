@@ -1,10 +1,10 @@
 pragma circom 2.0.0;
 
-template Hash2() {
+template Multiplier() {
     signal input a;
     signal input b;
-    signal output hash;
-    hash <-- a + b;
+    signal output c;
+    c <== a * b;
 }
 
-component main = Hash2();
+component main {public [c]} = Multiplier();
