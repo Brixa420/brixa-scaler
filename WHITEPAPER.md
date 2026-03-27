@@ -236,7 +236,7 @@ Every time someone creates a new L2:
 
 What if you could:
 - Keep using **ANY** blockchain (Ethereum, Polygon, Arbitrum, etc.)
-- Get **4,000,000+ TPS** on transaction ingestion
+- Get **2,800,000+ TPS** on transaction ingestion
 - Pay **less than a cent** per thousand transactions
 - Prove **correctness** with ZK proofs without revealing data
 - **Never bridge** funds or trust new networks
@@ -346,7 +346,7 @@ Traditional L2s require bridging funds, deploying to a new network, and trusting
 
 | Feature | BrixaScaler | Traditional L2 |
 |---------|-------------|----------------|
-| Ingestion TPS | 4,000,000 | 10,000 |
+| Ingestion TPS | 2,800,000 | 10,000 |
 | Setup Time | 5 minutes | Weeks |
 | Bridge Funds | **Never** | Always |
 | Trust New Network | **No** | Yes |
@@ -381,7 +381,7 @@ Player/Agent Action
 
 ```
 Batch + Merkle: 237,808 ns/op = 0.238 ms
-                 = ~4,000,000 transactions per second
+                 = ~2,800,000 transactions per second
 ```
 
 **What was measured:** 1,000 transactions batched with Merkle tree construction, ProcessBatch function, real code path, no mocking.
