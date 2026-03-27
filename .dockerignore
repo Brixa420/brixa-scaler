@@ -1,0 +1,25 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+*.md
+!README.md
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Build artifacts
+brixascaler
+*.test
+
+# Local config
+.env
+config/*.json
+keys/
+
+# OS
+.DS_Store
+Thumbs.db

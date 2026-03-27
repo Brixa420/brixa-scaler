@@ -1,38 +1,54 @@
+# ═══════════════════════════════════════════════════════════════
+# BrixaScaler - Production Docker Image
+# ═══════════════════════════════════════════════════════════════
+
 # Build stage
 FROM golang:1.21-alpine AS builder
 
 # Install build dependencies
-RUN apk add --no-cache git gcc musl-dev
+RUN apk add --no-cache git
 
-WORKDIR /app
+WORKDIR /build
 
-# Copy Go module files
+# Copy go mod files
 COPY integration/go/go.mod integration/go/go.sum ./
 RUN go mod download
 
-# Copy source code
-COPY integration/go/ ./
+# Copy source
+COPY integration/go/ .
 
-# Build the binary
-RUN CGO_ENABLED=1 go build -o scaler .
+# Build binary
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o brixascaler .
 
-# Runtime stage
-FROM alpine:3.19
+# ═══════════════════════════════════════════════════════════════
+# Production stage - Minimal distroless image
+# ═══════════════════════════════════════════════════════════════
 
-# Install runtime dependencies
-RUN apk add --no-cache ca-certificates leveldb
+FROM gcr.io/distroless/base-debian12:nonroot
+
+# Create non-root user
+RUN adduser --disabled-password --gecos "" --shell /bin/false brixascaler
 
 WORKDIR /app
 
 # Copy binary from builder
-COPY --from=builder /app/scaler .
+COPY --from=builder /build/brixascaler .
 
-# Copy config and data
-COPY config.yaml ./
-RUN mkdir -p data
+# Create config directory
+RUN mkdir -p /app/config && chown brixascaler:brixascaler /app/config
+
+# Use read-only filesystem
+VOLUME ["/app/config"]
+
+# Switch to non-root user
+USER brixascaler
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD wget -q --spider http://localhost:8080/health || exit 1
 
 # Expose ports
-EXPOSE 8545 8546 9090
+EXPOSE 8080 9090
 
-# Run the scaler
-ENTRYPOINT ["/app/scaler"]
+# Run as read-only with no shell access
+ENTRYPOINT ["/app/brixascaler"]

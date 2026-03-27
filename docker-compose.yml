@@ -1,101 +1,60 @@
 version: '3.8'
 
 services:
-  # Local blockchain for testing (Ganache)
-  blockchain:
-    image: trufflesuite/ganache:latest
-    ports:
-      - "8545:8545"  # RPC
-      - "8546:8546"  # WS
-    command: -d --deterministic --host 0.0.0.0 --port 8545 --chainId 1337
-    networks:
-      - brixa-net
-
-  # BrixaScaler Node
-  scaler:
+  brixascaler:
     build:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "8080:8080"  # RPC
-      - "9090:9090"  # Metrics
+      - "8080:8080"
+      - "9090:9090"
     environment:
-      - DEMO_MODE=true
-      - SETTLEMENT_RPC_URL=http://blockchain:8545
-      - VERIFIER_ADDRESS=0x0000000000000000000000000000000000000000
-      - LOG_LEVEL=info
-      - LOG_FORMAT=json
-      - METRICS_ENABLED=true
-      - METRICS_PORT=9090
-      - RPC_PORT=8080
-    depends_on:
-      - blockchain
+      - DEMO_MODE=${DEMO_MODE:-true}
+      - MAX_BATCH_SIZE=${MAX_BATCH_SIZE:-1000}
+      - API_KEY=${API_KEY}
+      - RATE_LIMIT_PER_SECOND=${RATE_LIMIT_PER_SECOND:-10}
+      - RATE_LIMIT_BURST=${RATE_LIMIT_BURST:-20}
+      - MAX_REQUEST_SIZE=${MAX_REQUEST_SIZE:-1048576}
+      - MAX_GAS_PRICE_GWEI=${MAX_GAS_PRICE_GWEI:-100}
+      - CORS_ORIGINS=${CORS_ORIGINS}
+      - SETTLEMENT_RPC_URL=${SETTLEMENT_RPC_URL}
+      - SETTLEMENT_PRIVATE_KEY=${SETTLEMENT_PRIVATE_KEY}
+      - MULTISIG_ENABLED=${MULTISIG_ENABLED:-false}
+      - MULTISIG_THRESHOLD=${MULTISIG_THRESHOLD:-2}
+      - MULTISIG_APPROVERS=${MULTISIG_APPROVERS}
     volumes:
-      - brixa-data:/app/data
-    networks:
-      - brixa-net
+      - ./config:/app/config:ro
+    # Security: read-only, no new privileges, limited resources
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 128M
+    # Restart policy
+    restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 10s
 
-  # Prometheus for metrics collection
+  # Optional: Prometheus for metrics
   prometheus:
     image: prom/prometheus:latest
     ports:
       - "9091:9090"
     volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
-      - prometheus-data:/prometheus
-    networks:
-      - brixa-net
-
-  # Grafana for metrics visualization
-  grafana:
-    image: grafana/grafana:latest
-    ports:
-      - "3001:3000"
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_USERS_ALLOW_SIGN_UP=false
-    volumes:
-      - grafana-data:/var/lib/grafana
-      - ./grafana-dashboards:/etc/grafana/provisioning/dashboards
-    networks:
-      - brixa-net
-    depends_on:
-      - prometheus
-
-  # Optional: Redis for distributed state
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
-    networks:
-      - brixa-net
-    command: redis-server --appendonly yes
-
-networks:
-  brixa-net:
-    driver: bridge
-
-volumes:
-  brixa-data:
-  prometheus-data:
-  grafana-data:
-  redis-data:
-
----
-# Usage:
-# 1. Start everything: docker-compose up -d
-# 2. View logs: docker-compose logs -f scaler
-# 3. Check metrics: curl localhost:9090/stats
-# 4. Stop: docker-compose down
-#
-# For production, set:
-#   - DEMO_MODE=false
-#   - Real RPC URLs
-#   - Real verifier address
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    profiles:
+      - monitoring
