@@ -15,6 +15,8 @@ export SETTLEMENT_PRIVATE_KEY=your_private_key_here
 
 This software is provided as-is without warranty. The authors assume no liability for any losses incurred through use of this software. Always test thoroughly in demo mode before enabling real transactions.
 
+> ⚠️ **For Developers:** This is pre-production software. ZK proof generation, actual RPC settlement, and hardware wallet signing are stubs/placeholders. See GitHub issues for implementation status.
+
 ---
 
 **High-throughput transaction batching with ZK proofs for AI agents and blockchain games.**
