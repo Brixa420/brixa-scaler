@@ -1001,8 +1001,9 @@ type PendingBatch struct {
 // ZKPipeline manages the batching → ZK proof → settlement flow
 type ZKPipeline struct {
 	// Configuration
-	BatchThreshold    int           `env:"SETTLEMENT_BATCH_THRESHOLD"`     // Auto-settle after N batches
-	SettlementInterval time.Duration `env:"SETTLEMENT_INTERVAL_SECONDS"` // OR auto-settle after X seconds
+	BatchThreshold     int           `env:"SETTLEMENT_BATCH_THRESHOLD"`      // Auto-settle after N batches
+	SettlementInterval time.Duration `env:"SETTLEMENT_INTERVAL_SECONDS"`    // OR auto-settle after X seconds
+	SettlementAggregate int          `env:"SETTLEMENT_AGGREGATE_N"`         // Aggregate N ZK proofs per settlement tx
 	
 	// Queue
 	pendingBatches   chan *PendingBatch
@@ -1018,6 +1019,9 @@ type ZKPipeline struct {
 	proofReady       chan *PendingBatch
 	settlementReady  chan *PendingBatch
 	
+	// Aggregation buffer
+	pendingSettlement []*PendingBatch
+	
 	// Circuit breaker
 	breaker *CircuitBreaker
 }
@@ -1027,13 +1031,15 @@ var zkPipeline *ZKPipeline
 // NewZKPipeline creates a new ZK settlement pipeline
 func NewZKPipeline() *ZKPipeline {
 	p := &ZKPipeline{
-		BatchThreshold:     getEnvInt("SETTLEMENT_BATCH_THRESHOLD", 10),
+		BatchThreshold:      getEnvInt("SETTLEMENT_BATCH_THRESHOLD", 10),
 		SettlementInterval: time.Duration(getEnvInt("SETTLEMENT_INTERVAL_SECONDS", 60)) * time.Second,
-		pendingBatches:    make(chan *PendingBatch, 1000),
-		proofReady:        make(chan *PendingBatch, 100),
-		settlementReady:   make(chan *PendingBatch, 100),
-		processedBatches:  make([]*PendingBatch, 0),
-		breaker:           NewCircuitBreaker(5, 5*time.Minute),
+		SettlementAggregate: getEnvInt("SETTLEMENT_AGGREGATE_N", 260),  // ~260 ZK proofs per settlement tx (~17k / 65)
+		pendingBatches:     make(chan *PendingBatch, 1000),
+		proofReady:         make(chan *PendingBatch, 100),
+		settlementReady:    make(chan *PendingBatch, 100),
+		processedBatches:   make([]*PendingBatch, 0),
+		pendingSettlement:  make([]*PendingBatch, 0),
+		breaker:            NewCircuitBreaker(5, 5*time.Minute),
 	}
 	return p
 }
@@ -1118,48 +1124,102 @@ func (zp *ZKPipeline) generateZKProof(batch *PendingBatch) (*ZKProof, error) {
 
 // settlementStage settles batches to L1/L2
 func (zp *ZKPipeline) settlementStage() {
-	for batch := range zp.settlementReady {
-		if zp.breaker.IsOpen() {
-			logger.Warn("settlement circuit breaker open, queuing batch", map[string]interface{}{
-				"batch_id": batch.BatchID,
-			})
-			time.Sleep(30 * time.Second)
-			zp.settlementReady <- batch // Re-queue
-			continue
+	for {
+		// Collect batches until we have enough to aggregate
+		var batchesToSettle []*PendingBatch
+		
+		// Wait for first batch
+		batch, ok := <-zp.settlementReady
+		if !ok {
+			return
 		}
 		
 		batch.State = "settling"
+		batchesToSettle = append(batchesToSettle, batch)
 		
-		// Call existing settlement logic
-		batchResp := BatchResponse{
-			BatchID: batch.BatchID,
-			Root:    batch.RootHash,
+		// Collect more batches (non-blocking)
+		collectTimeout := time.After(100 * time.Millisecond)
+	collectLoop:
+		for len(batchesToSettle) < zp.SettlementAggregate {
+			select {
+			case b, ok := <-zp.settlementReady:
+				if !ok {
+					break collectLoop
+				}
+				b.State = "settling"
+				batchesToSettle = append(batchesToSettle, b)
+			case <-collectTimeout:
+				break collectLoop
+			}
 		}
 		
-		_, err := ProcessSettlement(batchResp, batch.Txs)
-		if err != nil {
-			logger.Error("settlement failed", map[string]interface{}{
-				"batch_id": batch.BatchID,
-				"error":    err.Error(),
+		// Check circuit breaker
+		if zp.breaker.IsOpen() {
+			logger.Warn("settlement circuit breaker open, queuing batches", map[string]interface{}{
+				"batch_count": len(batchesToSettle),
 			})
-			batch.State = "failed"
-			zp.breaker.RecordFailure()
-			zp.handleFailure(batch)
+			time.Sleep(30 * time.Second)
+			for _, b := range batchesToSettle {
+				zp.settlementReady <- b
+			}
 			continue
 		}
 		
-		batch.State = "settled"
-		zp.breaker.RecordSuccess()
+		// Aggregate all batches into ONE settlement tx
+		aggregatedRoot := ""
+		totalTxs := 0
+		for i, b := range batchesToSettle {
+			if i == 0 {
+				aggregatedRoot = b.RootHash
+			} else {
+				// Combine roots
+				combined := append([]byte(b.RootHash), []byte(aggregatedRoot)...)
+				hash := sha256.Sum256(combined)
+				aggregatedRoot = fmt.Sprintf("%x", hash)
+			}
+			totalTxs += b.TxCount
+		}
 		
+		// Call settlement ONCE with aggregated data
+		batchResp := BatchResponse{
+			BatchID: fmt.Sprintf("agg_%d", batchesToSettle[0].BatchID),
+			Root:    aggregatedRoot,
+		}
+		
+		// Flatten all txs for settlement
+		var allTxs []Transaction
+		for _, b := range batchesToSettle {
+			allTxs = append(allTxs, b.Txs...)
+		}
+		
+		_, err := ProcessSettlement(batchResp, allTxs)
+		if err != nil {
+			logger.Error("aggregated settlement failed", map[string]interface{}{
+				"batch_count": len(batchesToSettle),
+				"error":       err.Error(),
+			})
+			for _, b := range batchesToSettle {
+				b.State = "failed"
+				zp.handleFailure(b)
+			}
+			zp.breaker.RecordFailure()
+			continue
+		}
+		
+		// Mark all as settled
+		zp.breaker.RecordSuccess()
 		zp.mu.Lock()
-		zp.totalSettled++
-		zp.processedBatches = append(zp.processedBatches, batch)
+		zp.totalSettled += uint64(len(batchesToSettle))
+		for _, b := range batchesToSettle {
+			b.State = "settled"
+			zp.processedBatches = append(zp.processedBatches, b)
+		}
 		zp.mu.Unlock()
 		
-		logger.Info("batch settled successfully", map[string]interface{}{
-			"batch_id":  batch.BatchID,
-			"tx_count":  batch.TxCount,
-			"root_hash": batch.RootHash[:16] + "...",
+		logger.Info("aggregated settlement success", map[string]interface{}{
+			"batches_aggregated": len(batchesToSettle),
+			"total_txs":          totalTxs,
+			"aggregated_root":    aggregatedRoot[:16] + "...",
 		})
 	}
 }
