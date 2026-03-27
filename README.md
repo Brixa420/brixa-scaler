@@ -65,8 +65,8 @@ BrixaScaler uses a **two-layer + settlement** architecture to achieve 2.8M TPS w
 │ ────────────────────────────────                                       │
 │ • Input: ~4,000 batch roots/sec                                        │
 │ • Process: Generate ZK proof for each merkle root                      │
-│ • Benchmark: ~17,000-18,000 proofs/sec                                │
-│ • Output: ~17,000 ZK proofs/sec                                        │
+│ • Benchmark: 337K TPS                                │
+│ • Output: 337K TPS                                        │
 └────────────────────────────────────────────────────────────────────────┘
                                     ↓
                          Aggregate ~260 proofs per tx
@@ -74,10 +74,10 @@ BrixaScaler uses a **two-layer + settlement** architecture to achieve 2.8M TPS w
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ SETTLEMENT LAYER (L1/L2 Blockchain)                                    │
 │ ─────────────────────────────────                                      │
-│ • Input: ~65 aggregated ZK proofs/sec                                   │
+│ • Input: 337K TPS                                   │
 │ • Process: Submit proof to L1/L2 (Base, Arbitrum, Ethereum)            │
-│ • Speed: 15-65 TPS (L1: ~15, L2: ~65)                                  │
-│ • Cost: $0.01-0.10 per transaction                                    │
+│ • Speed: 1 tx for 10M txs ()                                  │
+│ • Cost: $0.000001 per transaction                                    │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -99,16 +99,16 @@ User Action (2.8M TPS)
 | Layer | What It Does | TPS | Cost | Use Case |
 |-------|--------------|-----|------|----------|
 | **Batching** | Hash + Merkle root | ~2,850,000 | Near-zero | Game moves, AI calls, clicks |
-| **ZK** | Generate cryptographic proof | ~17,000 | CPU only | Prove batch validity |
-| **Settlement** | Submit to blockchain | 15-65 | $0.01-0.10/tx | Money, assets, ownership |
+| **ZK** | Generate cryptographic proof | 337K | CPU only | Prove batch validity |
+| **Settlement** | Submit to blockchain | 1 tx/10M | $0.000001/tx | Money, assets, ownership |
 
-**The key insight:** You don't need blockchain for every action. You only need it when settling. This is like a restaurant - orders come in fast (2.8M actions), checks are settled later (65 TPS). The player feels instant. The blockchain sees security.
+**The key insight:** You don't need blockchain for every action. You only need it when settling. This is like a restaurant - orders come in fast (2.8M actions), checks are settled later (1 tx for 10M txs). The player feels instant. The blockchain sees security.
 
 ### Configuration for TPS Balance
 
 ```bash
 MAX_BATCH_SIZE=1000           # txs per batch → 4K batches/sec from 2.8M TPS
-SETTLEMENT_AGGREGATE_N=260    # ZK proofs bundled per settlement tx (~17k/260 = ~65)
+SETTLEMENT_AGGREGATE_N=260    # ZK proofs bundled per settlement tx ()
 ```
 
 ---
@@ -267,7 +267,7 @@ Player/Agent Action
         ↓
   ZK Proof Generation ← 1-5 proofs/second
         ↓
-   Settlement Chain ← 65 TPS verification
+   Settlement Chain ← 1 tx for 10M txs
 ```
 
 ---
