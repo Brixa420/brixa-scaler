@@ -175,7 +175,7 @@ Batch + Merkle: 237,808 ns/op = 0.238 ms
 | Single machine | Distributed across many machines |
 | 10-core parallelism | 64-core, 128-core, or more |
 
-**What You Can Say:**
+**What We Say:**
 
 "4.2M TPS on a $600 Mac Mini M4. Linear scaling with better hardware. No theoretical limit — just add cores."
 
