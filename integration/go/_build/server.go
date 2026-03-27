@@ -42,7 +42,7 @@ type SecurityConfig struct {
 
 func LoadConfig() Config {
 	return Config{
-		MaxBatchSize:    getEnvInt("MAX_BATCH_SIZE", 235),   // ~235 txs per batch → 17k batches/sec from 4M TPS
+		MaxBatchSize:    getEnvInt("MAX_BATCH_SIZE", 1000),   // 1K txs per batch for congestion headroom
 		BatchTimeoutMs: getEnvInt("BATCH_TIMEOUT_MS", 1000),
 		RPCPort:         getEnvInt("RPC_PORT", 8080),
 		MetricsPort:     getEnvInt("METRICS_PORT", 9090),
