@@ -408,10 +408,11 @@ if (cluster.isMaster) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     
+    // Parse URL
     const url = new URL(req.url, `http://localhost:${CONFIG.port}`);
     const pathname = url.pathname;
     
-    // RPC endpoint
+    // RPC endpoint - Ethereum-compatible
     if (pathname === '/rpc' && req.method === 'POST') {
       let body = '';
       req.on('data', chunk => body += chunk);
@@ -419,9 +420,11 @@ if (cluster.isMaster) {
         res.setHeader('Content-Type', 'application/json');
         try {
           const reqJson = JSON.parse(body);
-          const tx = reqJson.params?.[0] || {};
-          const shardId = rollup.workers[0].shards[0].queue(tx);
-          res.end(JSON.stringify({ jsonrpc: '2.0', result: shardId, id: reqJson.id }));
+          // Queue the transaction to a random shard
+          const worker = rollup.workers[Math.floor(Math.random() * rollup.workers.length)];
+          const shard = worker.shards[Math.floor(Math.random() * worker.shards.length)];
+          shard.queue(reqJson.params?.[0] || {});
+          res.end(JSON.stringify({ jsonrpc: '2.0', result: 'queued_' + Date.now(), id: reqJson.id }));
         } catch(e) {
           res.end(JSON.stringify({ jsonrpc: '2.0', error: { message: e.message }, id: 1 }));
         }
@@ -429,7 +432,7 @@ if (cluster.isMaster) {
       return;
     }
     
-    // Batch endpoint
+    // Batch endpoint - submit array of transactions
     if (pathname === '/batch' && req.method === 'POST') {
       let body = '';
       req.on('data', chunk => body += chunk);
@@ -461,6 +464,8 @@ if (cluster.isMaster) {
     res.setHeader('Content-Type', 'text/html; charset=UTF-8');
     
     const stats = rollup.getStats();
+    
+    res.end(`
 <!DOCTYPE html>
 <html>
 <head>
@@ -569,36 +574,32 @@ if (cluster.isMaster) {
     </div>
   </div>
   
+  <!-- How It Works -->
   <div style="margin-top:30px;padding:20px;background:rgba(0,245,212,0.1);border-radius:12px;border:1px solid #00f5d4;">
     <h3 style="color:#00f5d4;margin-bottom:15px;">How It Works</h3>
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center;">
       <div style="background:#ff2d75;padding:10px 15px;border-radius:8px;">1. Your App</div>
-      <div style="color:#666;">→</div>
+      <span style="color:#666;">→</span>
       <div style="background:#ff2d75;padding:10px 15px;border-radius:8px;">2. BrixaRoll</div>
-      <div style="color:#666;">→</div>
+      <span style="color:#666;">→</span>
       <div style="background:#ff2d75;padding:10px 15px;border-radius:8px;">3. Batch + ZK</div>
-      <div style="color:#666;">→</div>
+      <span style="color:#666;">→</span>
       <div style="background:#ff2d75;padding:10px 15px;border-radius:8px;">4. Chain (1 tx)</div>
     </div>
     <p style="margin-top:15px;color:#888;font-size:0.9em;">
       BrixaRoll batches 1M+ transactions off-chain, generates a ZK proof, 
-      and submits ONE transaction to the chain. Chain sees 1 tx, but 1M executed.
+      and submits ONE transaction to the chain.
     </p>
   </div>
   
+  <!-- Quick Demo -->
   <div style="margin-top:20px;padding:20px;background:rgba(255,45,117,0.1);border-radius:12px;border:1px solid #ff2d75;">
     <h3 style="color:#ff2d75;margin-bottom:10px;">Quick Demo</h3>
     <p style="color:#aaa;margin-bottom:15px;">Send test transactions:</p>
     <div style="display:flex;gap:10px;flex-wrap:wrap;">
-      <button onclick="sendTest()" style="background:#00f5d4;color:#000;padding:12px 24px;border:none;border-radius:8px;cursor:pointer;font-weight:bold;">
-        Send 1 Transaction
-      </button>
-      <button onclick="sendBatch()" style="background:#ff2d75;color:#fff;padding:12px 24px;border:none;border-radius:8px;cursor:pointer;font-weight:bold;">
-        Send 1,000 Txs
-      </button>
-      <button onclick="sendStress()" style="background:#e94560;color:#fff;padding:12px 24px;border:none;border-radius:8px;cursor:pointer;font-weight:bold;">
-        Stress Test (10K)
-      </button>
+      <button onclick="sendTest()" style="background:#00f5d4;color:#000;padding:12px 24px;border:none;border-radius:8px;cursor:pointer;font-weight:bold;">Send 1 Transaction</button>
+      <button onclick="sendBatch()" style="background:#ff2d75;color:#fff;padding:12px 24px;border:none;border-radius:8px;cursor:pointer;font-weight:bold;">Send 1,000 Txs</button>
+      <button onclick="sendStress()" style="background:#e94560;color:#fff;padding:12px 24px;border:none;border-radius:8px;cursor:pointer;font-weight:bold;">Stress Test (10K)</button>
     </div>
     <pre id="demoOutput" style="margin-top:15px;background:#000;padding:15px;border-radius:8px;overflow-x:auto;font-size:0.85em;color:#0f0;max-height:200px;">Click a button to test...</pre>
   </div>
@@ -651,11 +652,7 @@ if (cluster.isMaster) {
         for(let i=0; i<1000; i++) {
           txs.push({from: '0x742d35Cc6634C0532925a3b844Bc9e7595f0fEa1', to: '0xABC...', value: '0x1'});
         }
-        await fetch('/batch', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify(txs)
-        });
+        await fetch('/batch', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(txs) });
       }
       output.textContent = 'Stress test complete! 10,000 txs queued.';
       updateStats();
