@@ -126,7 +126,6 @@ Player/Agent Action
 ```
 
 ---
-
 ## License
 
 MIT
