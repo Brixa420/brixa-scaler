@@ -1,8 +1,6 @@
 # 💜 BrixaScaler - High-Throughput Transaction Batching with ZK Proofs
 
-> **One middleware. Every chain. 4M+ TPS. Zero-Knowledge Privacy.**
-
-**"The VPN for TPS" - This is the code that makes crypto actually work.**
+> **One middleware. Every chain. 4M+ TPS ingestion. ZK settlement.**
 
 ---
 
@@ -99,19 +97,24 @@ The user gets **instant feedback**. The chain gets **one transaction**. Everyone
 
 ---
 
-# 🚀 Why This Replaces Every L2
+# 🚀 Why This Is Different From L2s
+
+Traditional L2s require bridging funds, deploying to a new network, and trusting different infrastructure. BrixaScaler offers a different tradeoff: keep your existing chain infrastructure, add middleware for high-speed ingestion, and settle back to the same chain.
+
+**No bridge required** — but proving throughput is limited to 1-5 proofs per second.
 
 ## Comparison
 
 | Feature | BrixaScaler | Traditional L2 |
 |---------|-------------|----------------|
-| TPS | 4,000,000+ | 10,000 |
+| Ingestion TPS | 4,200,000 | 10,000 |
 | Setup Time | 5 minutes | Weeks |
 | Bridge Funds | **Never** | Always |
 | Trust New Network | **No** | Yes |
 | Chain Agnostic | Yes | No |
 | ZK Privacy | Yes | Rarely |
-| Hardware Wallets | Yes | No |
+| Proving Throughput | 1-5 proofs/sec | Varies |
+| End-to-End Latency | Minutes to hours | Seconds to minutes |
 
 ---
 
@@ -153,7 +156,7 @@ Batch + Merkle: 237,808 ns/op = 0.238 ms
 | 100 tps | 100,000 |
 | 1,000 tps | 1,000,000 |
 
-*The chain won't know what hit it.*
+*These are theoretical maximums based on batching efficiency, not guaranteed throughput. Real-world throughput depends on ZK proving capacity and settlement chain block space.*
 
 ---
 
@@ -224,6 +227,6 @@ export SETTLEMENT_PRIVATE_KEY=your_private_key
 
 ---
 
-**TL;DR**: BrixaScaler makes any blockchain 1,000x faster without being an L2. Developers just run our middleware and point their wallet to localhost. No bridge, no new chain, no trust issues. Just infinite TPS on any chain.
+**TL;DR**: BrixaScaler makes any blockchain 1,000x faster without being an L2. Developers just run our middleware and point their wallet to localhost. No bridge, no new chain, no trust issues. Just 4M+ TPS ingestion with ZK settlement to any chain.
 
 **This software is provided as-is for demonstration purposes. No real transactions are processed in Demo Mode. Use at your own risk.**
