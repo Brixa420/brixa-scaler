@@ -65,8 +65,8 @@ BrixaScaler uses a **two-layer + settlement** architecture to achieve 2.8M TPS w
 │ ────────────────────────────────                    │
 │ • Input: ~4,000 batch roots/sec                    │
 │ • Process: Generate ZK proof for each merkle root           │
-│ • Benchmark: 337K TPS                │
-│ • Output: 337K TPS                    │
+│ • Benchmark: 800 TPS                │
+│ • Output: 800 TPS                    │
 └────────────────────────────────────────────────────────────────────────┘
                   ↓
              Aggregate ~260 proofs per tx
@@ -74,7 +74,7 @@ BrixaScaler uses a **two-layer + settlement** architecture to achieve 2.8M TPS w
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ SETTLEMENT LAYER (L1/L2 Blockchain)                  │
 │ ─────────────────────────────────                   │
-│ • Input: 337K TPS                  │
+│ • Input: 800 TPS                  │
 │ • Process: Submit proof to L1/L2 (Base, Arbitrum, Ethereum)      │
 │ • Speed: 1 tx for 10M txs ()                 │
 │ • Cost: $0.000001 per transaction                  │
@@ -89,7 +89,7 @@ User Action (2.8M TPS)
 ┌──────────────┐   ┌──────────────┐   ┌──────────────┐
 │  BATCHING  │ ──→ │   ZK    │ ──→ │ SETTLEMENT │
 │  LAYER   │   │  LAYER   │   │  LAYER   │
-│ ~2.8M TPS   │   │ ~337K TPS  │   │  1 tx/10M txs  │
+│ ~2.8M TPS   │   │ ~800 TPS  │   │  1 tx/10M txs  │
 └──────────────┘   └──────────────┘   └──────────────┘
   (1000 txs)      (ZK proof)    (260 proofs/tx)
 ```
@@ -196,7 +196,7 @@ Millions of TPS for batch plus Merkle construction in the Go batcher ProcessBatc
 
 ## What This Means
 
-The Go layer is not the bottleneck. The bottleneck is ZK proving at 337K TPS. The Go layer can ingest and hash transactions faster than they can be proven. This is architecturally correct. Fast ingestion, slow proving, periodic settlement.
+The Go layer is not the bottleneck. The bottleneck is ZK proving at 800 TPS. The Go layer can ingest and hash transactions faster than they can be proven. This is architecturally correct. Fast ingestion, slow proving, periodic settlement.
 
 ---
 
@@ -265,7 +265,7 @@ Player/Agent Action
     ↓
  Batch + Merkle Tree
     ↓
- ZK Proof Generation ← 337K TPS
+ ZK Proof Generation ← 800 TPS
     ↓
   Settlement Chain ← 1 tx for 10M txs
 ```
