@@ -2,22 +2,37 @@
 
 ## Measured Performance (Apple M4 10-core)
 
-### Layer 1: Transaction Batching (PARALLEL + SHARDED)
-| Batch Size | Shards | Throughput |
-|------------|--------|------------|
-| 5,000,000 | 5 | 12.1M TPS |
-| 5,000,000 | 10 | **16.5M TPS** |
-| 10,000,000 | 10 | 13.0M TPS |
-| 20,000,000 | 10 | 13.3M TPS |
+### Layer 1: Transaction Batching - MERKLE TREE
 
-*Method: SHA256 + **Parallel goroutines** + Sharded Merkle tree (10 CPU cores)*
-
-### Layer 1: Single-Shard (baseline)
+#### Single-Shard (baseline)
 | Batch Size | Time | Throughput |
 |------------|------|------------|
-| 10,000 | 8ms | 1.2M TPS |
-| 100,000 | 70ms | 1.4M TPS |
-| 1,000,000 | 600ms | 1.5M TPS |
+| 1,000 | 97µs | 10.3M TPS |
+| 10,000 | 963µs | 10.4M TPS |
+| 100,000 | 9.3ms | 10.7M TPS |
+| 1,000,000 | 83.8ms | 11.9M TPS |
+
+#### Sharded + Parallel (10 cores)
+| Batch Size | Shards | Time | Throughput | Improvement |
+|------------|--------|------|------------|-------------|
+| 1,000,000 | 10 | 44.5ms | 22.5M TPS | 1.9x |
+| 5,000,000 | 10 | 206.6ms | 24.2M TPS | 2.0x |
+| 10,000,000 | 10 | 426ms | 23.5M TPS | 2.0x |
+| 10,000,000 | 20 | 394ms | 25.4M TPS | 2.1x |
+
+*Method: SHA256 hash + Merkle tree construction (Go, 10 parallel goroutines)*
+
+---
+
+### Key Findings
+
+| Mode | Peak TPS |
+|------|----------|
+| Single-shard | **11.9M TPS** |
+| Sharded (10) | **25.4M TPS** |
+| **Speedup** | **2.1x** |
+
+---
 
 ### Layer 2: ZK Proof Generation
 | Protocol | Prove | Verify | Trusted Setup |
@@ -35,85 +50,59 @@
 
 ## Architecture Analysis
 
-### The Throughput Gap (PARALLEL + SHARDED)
+### The Throughput Gap
 
 | Layer | Peak Throughput | Implementation |
 |-------|-----------------|-----------------|
-| Batching | **16.5M TPS** | 10 parallel goroutines, 10 shards |
+| Batching (sharded) | **25.4M TPS** | 10 parallel goroutines |
 | ZK Proving | 2.6 TPS | Single Groth16 prover |
 
-**Ratio: ~6,350,000x**
-
-### Why This Is By Design
-
-```
-Ingest: 16.5M TPS (parallel goroutines across 10 cores)
-Prove:  ~3 TPS (steady state)
-Queue:  Builds during bursts, drains during lulls
-```
-
-This is exactly how Visa, Kafka, and any queue-based system work.
-
-### Parallel Scaling Strategy
-
-```
-10 CPU cores × 1.65M TPS/core ≈ 16.5M TPS
-```
-
-More cores = more throughput. The batching layer scales horizontally.
+**Solution: Validator Network** - N validators = N × 2.6 TPS proving capacity.
 
 ---
 
-## Sharding + Parallelism Architecture
+## Sharding Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    VALIDATOR COORDINATOR                │
-│              (goroutine per shard, 10 cores)            │
+│              VALIDATOR COORDINATOR                       │
+│         (goroutine per shard, 10 cores)                 │
 └─────────┬─────────┬─────────┬─────────┬─────────────────┘
           │         │         │         │
     ┌─────▼─────┐┌──▼──┐┌─────▼─────┐┌──▼──┐
-    │ Shard 0   ││Shard││ Shard N-1 ││Shard│
-    │ (parallel ││ 1   ││ (parallel ││ N   │
-    │  goroutine)││(par)││  goroutine)││(par)│
+    │ Shard 0   ││Shard││ Shard 9  ││ ... │
+    │(parallel) ││ 1   ││(parallel) ││     │
     └─────┬─────┘└─┬───┘└─────┬─────┘└─┬───┘
           │        │         │        │
           ▼        ▼         ▼        ▼
     ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐
-    │ Root 0  │ │ Root 1  │ │Root N-1 │ │ Root N  │
+    │ Root 0  │ │ Root 1  │ │ Root 9  │ │   ...   │
     └────┬────┘ └────┬────┘ └────┬────┘ └────┬────┘
          └───────────┴────┬─────┴───────────┘
                           ▼
                    ┌─────────────┐
                    │  SUPER ROOT │
-                   │ (Merkle of  │
+                   │(Merkle of   │
                    │ shard roots)│
                    └──────┬──────┘
                           ▼
                    ┌─────────────┐
-                   │   ZK PROOF  │
+                   │   ZK PROOF   │
+                   │ (validator)  │
                    └─────────────┘
 ```
-
-Each shard processes in parallel via goroutines. Uses `runtime.GOMAXPROCS(10)` for max parallelism.
-
----
-
-## Implementation Notes
-
-- **Parallel**: Go `sync.WaitGroup` + goroutines per shard
-- **Sharded**: Independent Merkle trees per shard, combined into super-root
-- **Hash**: `crypto/sha256` (assembly-optimized on Apple Silicon)
-- **ZK**: Groth16 with beacon-secured trusted setup
 
 ---
 
 ## Running Benchmarks
 
 ```bash
-# Sharded + Parallel benchmark (Go)
-cd integration/go && go run sharded-merkle.go
+# Merkle tree benchmark (Go)
+cd integration/go && go run benchmark_merkle.go
 
-# Two-layer benchmark (JS + ZK)
-node integration/benchmark-two-layer.js
+# Sharded merkle (existing)
+go run sharded-merkle.go
+
+# Two-layer (JS + ZK)
+node ../benchmark-two-layer.js
 ```
