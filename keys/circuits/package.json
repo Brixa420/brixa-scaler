@@ -29,5 +29,8 @@
     "circom_tester": "0.0.21",
     "circomlibjs": "^0.1.7",
     "mocha": "^11.1.0"
+  },
+  "dependencies": {
+    "circom": "^0.5.46"
   }
 }

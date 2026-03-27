@@ -20,6 +20,7 @@
   "author": "Laura Wolf (Brixa420)",
   "license": "MIT",
   "dependencies": {
+    "poseidon-lite": "^0.3.0",
     "snarkjs": "^0.7.6"
   },
   "engines": {
