@@ -94,7 +94,6 @@ The Go layer is not the bottleneck. The bottleneck is ZK proving at one to five 
 **Settle to Ethereum, Polygon, Arbitrum, or any chain. Your choice.**
 
 ---
-
 ## Quick Start
 
 ```bash
@@ -106,6 +105,19 @@ node integration/brixaroll.js --rpc https://your-rpc-url
 
 # OR run BrixaScaler (simple batching)
 node integration/brixa-scaler.js --rpc https://your-rpc-url
+
+# Go implementation (faster)
+cd integration/go
+go build -o brixascaler server.go
+./brixascaler
+```
+
+Or run from the brixa-scaler directory:
+```bash
+cd /Users/laura/.openclaw/workspace/brixa-scaler
+npm install
+node integration/brixaroll.js --rpc https://your-rpc-url
+```
 
 # Go implementation (faster)
 cd integration/go
