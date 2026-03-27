@@ -21,6 +21,31 @@ This software is provided as-is without warranty. The authors assume no liabilit
 
 ---
 
+## 🚧 Incomplete Features (For Senior Devs)
+
+The following features are **stubbed out or partially implemented** and need to be completed:
+
+### Critical (Production-Blocking)
+- [ ] **ZK Proof Generation** — Currently logs batches but doesn't generate actual ZK proofs. Need to integrate circom/snarkjs circuits to prove batch validity
+- [ ] **RPC Settlement** — `DEMO_MODE=false` still logs transactions instead of actually sending to blockchain. Need real RPC calls via ethers/web3.js
+- [ ] **Hardware Wallet Signing** — Trezor/Ledger support is a stub. Need to integrate `@trezor/connect` or `@ledgerhq/hw-app-eth`
+
+### Important (Production-Ready)
+- [ ] **Transaction Simulation** — Simulate transactions before broadcasting (gas estimation, validity checks)
+- [ ] **Circuit Breaker** — Auto-pause settlement on repeated failures
+- [ ] **Multi-Sig Implementation** — High-value transactions need multiple approvals
+- [ ] **Confirmation Monitoring** — Track on-chain confirmations and retry failed txs
+- [ ] **Key Rotation** — Automatic API key rotation with webhook alerts
+
+### Nice to Have
+- [ ] **ZK Privacy** — Prove knowledge without revealing transaction data
+- [ ] **Cross-Chain Settlement** — Settle to multiple chains from single batch
+- [ ] **Distributed Mode** — Multiple batcher instances for horizontal scaling
+
+---
+
+## Quick Start
+
 **High-throughput transaction batching with ZK proofs for AI agents and blockchain games.**
 
 BrixaScaler lets thousands of AI agents or game players act instantly off-chain, then settle securely on-chain with cryptographic proof. No fifty thousand dollar gas bills. No twelve second waits.
