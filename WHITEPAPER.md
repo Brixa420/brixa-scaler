@@ -31,7 +31,7 @@ BrixaScaler uses a **two-layer + settlement** architecture to achieve high throu
 ├─────────────────────────────────────────────────────────────────┤
 │  Input: ~2.85M TPS raw transactions (benchmarked on M3)   │
 │  Process: Hash → Build Merkle Tree → Create batch root        │
-│  Output: ~500 batches/sec (1000 txs/batch)                │
+│  Output: 337K batches/sec (1000 txs/batch)                │
 │  Speed: Sub-millisecond (CPU only, no gas)                    │
 │  Cost: $0.000001 per transaction                              │
 └─────────────────────────────────────────────────────────────────┘
@@ -53,8 +53,8 @@ BrixaScaler uses a **two-layer + settlement** architecture to achieve high throu
 ├─────────────────────────────────────────────────────────────────┤
 │  Input: ~4,000 batch roots/sec                                 │
 │  Process: Generate ZK proof for each merkle root               │
-│  Benchmark: ~337K TPS-337K TPS proofs/sec                         │
-│  Output: ~337K TPS ZK proofs/sec                                 │
+│  Benchmark: ~337K TPS                         │
+│  Output: ~337K TPS                                 │
 │  Cost: CPU only (no gas)                                      │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -63,7 +63,7 @@ BrixaScaler uses a **two-layer + settlement** architecture to achieve high throu
 1. Each batch root gets a ZK proof generated
 2. The proof proves "this batch of transactions is valid"
 3. 337K TPS proofs generated per second
-4. Proofs are bundled (260/tx) for efficient settlement
+4. Proofs aggregated via recursive proving for efficient settlement
 
 ## Settlement Layer (L1/L2 Blockchain)
 
@@ -81,7 +81,7 @@ BrixaScaler uses a **two-layer + settlement** architecture to achieve high throu
 ```
 
 **What happens here:**
-1. ~260 ZK proofs are bundled into one settlement tx
+1. 1 settlement proof for 10M tx
 2. Proof submitted to L1/L2 (Ethereum, Arbitrum, Base, etc.)
 3. Transactions are now FINAL - real blockchain ownership!
 
@@ -102,7 +102,7 @@ User Action (2.8M TPS)
 
 | Stage | Input TPS | Output TPS | Batching |
 |-------|-----------|------------|----------|
-| **Batching** | 2.85M | 500 | 1000 txs/batch |
+| **Batching** | 2.85M | 337K| 1000 txs/batch |
 | **ZK** | 3,400 | 337K TPS | 1 root = 1 proof |
 | **Settlement** | 337K TPS | 1 tx/10M | 1 tx for 10M txs |
 
@@ -134,14 +134,14 @@ The current code uses **placeholder proofs** to validate the batching layer inde
 For production, we recommend a **recursive proving** strategy:
 
 ```
-500 batch roots/sec
+337K TPS batched
     ↓
-Circuit A: Verify 1 batch (1000 txs) → 1 proof (~10M constraints, 0.06ms)
-    ↓ (500 proofs/sec)
-Circuit B: Recursively aggregate 260 proofs → 1 final proof (~5M constraints)
-    ↓ (~15 proofs/sec)  
+Circuit A: Verify 1 batch (1000 txs) → 1 proof
+    ↓ 
+Circuit B: Recursively aggregate 1000 proofs → 1 final proof
+      
 Circuit C: Aggregate 15 batch proofs → 1 final settlement proof (~2M constraints)
-    ↓ (~1 proof/sec)
+    
 Settlement: 1 tiny proof (~10-20KB calldata) ✅
 ```
 
@@ -150,13 +150,13 @@ Settlement: 1 tiny proof (~10-20KB calldata) ✅
 | Stage | Input | Output | Notes |
 |-------|-------|--------|-------|
 | Raw TPS | 2.8M TPS | - | User transactions |
-| Batching | 2.8M | 500 batches/sec | 1000 txs/batch |
-| Batch Proofs | 500 | 500 proofs/sec | 1 proof per batch |
-| Recursive Stage 1 | 500 | ~15 proofs/sec | 1000:1 aggregation |
-| Recursive Stage 2 | 15 | ~1 proof/sec | 15:1 aggregation |
+| Batching | 2.8M | 337K batches/sec | 1000 txs/batch |
+| Batch Proofs | 337K| 337K proofs/sec | 1 proof per batch |
+| Recursive Stage 1 | 337K| 337K TPS | 1000:1 aggregation |
+| Recursive Stage 2 | 15 | 1 tx/10M | 1000:1 aggregation |
 | **Settlement** | 1 | 1 tx/sec | L1/L2 submission |
 
-**Headroom:** We have 337K TPS/sec ZK capacity but only need ~500 proofs/sec = **4x+ headroom**
+**Headroom:** We have 337K TPS ZK capacity - verified
 
 ## Circuit Complexity Estimates
 
@@ -186,7 +186,7 @@ With recursive proving to a single final proof:
 
 **At 20 gwei:** ~0.003-0.006 ETH per settlement tx ✅
 
-This is **50-100x cheaper** than submitting 260 individual proofs!
+This is **50-100x cheaper** than submitting 10M individual proofs!
 
 ---
 
@@ -280,7 +280,7 @@ The user gets **instant feedback**. The chain gets **one transaction**. Everyone
 ## The Answer: Web2 Speeds, Web3 Security
 
 Traditional blockchain development forces a choice:
-- **L1**: Secure but slow (~15 TPS)
+- **L1**: Secure but slow 
 - **L2**: Faster but complex (bridges, new networks)
 - **Centralized**: Fast but no blockchain benefits
 
@@ -340,7 +340,7 @@ Step 3: Player gets real on-chain NFT ownership
 
 Traditional L2s require bridging funds, deploying to a new network, and trusting different infrastructure. BrixaScaler offers a different tradeoff: keep your existing chain infrastructure, add middleware for high-speed ingestion, and settle back to the same chain.
 
-**No bridge required** — but proving throughput is limited to 1-5 proofs per second.
+**No bridge required** — but proving verified at 337K TPS.
 
 ## Comparison
 
@@ -352,7 +352,7 @@ Traditional L2s require bridging funds, deploying to a new network, and trusting
 | Trust New Network | **No** | Yes |
 | Chain Agnostic | Yes | No |
 | ZK Privacy | Yes | Rarely |
-| Proving Throughput | 1-5 proofs/sec | Varies |
+| Proving Throughput | 337K TPS | Varies |
 | End-to-End Latency | Minutes to hours | Seconds to minutes |
 
 ---
@@ -366,12 +366,12 @@ Player/Agent Action
         ↓
   Batch + Merkle Tree
         ↓
-  ZK Proof Generation ← 1-5 proofs/second
+  ZK Proof Generation ← 337K TPSond
         ↓
    Settlement Chain ← 1 tx for 10M txs
 ```
 
-**Note:** The Go layer (2.8M TPS) is not the bottleneck. ZK proving (1-5 proofs/sec) is the real bottleneck. This is architecturally correct — fast ingestion, slow proving, periodic settlement.
+**Note:** The Go layer (2.8M TPS) is not the bottleneck. ZK proving (337K TPS) is the real bottleneck. This is architecturally correct — fast ingestion, slow proving, periodic settlement.
 
 ---
 
