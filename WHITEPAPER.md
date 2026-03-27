@@ -19,60 +19,100 @@
 
 ---
 
-# 🏗️ Architecture: Actions vs Settlement
+# 🏗️ Two-Layer Architecture: Batching → ZK → Settlement
 
-BrixaScaler is designed as a **Layer 3/4 batching infrastructure**. We separate the fast actions from the secure settlement.
+BrixaScaler uses a **two-layer + settlement** architecture to achieve 4M TPS while maintaining blockchain security:
 
-## Layer 1: Batching Layer (Actions)
+## Layer 1: Batching Layer (High Throughput)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                 BATCHING LAYER (L3/L4)                        │
+│              LAYER 1: BATCHING LAYER                            │
 ├─────────────────────────────────────────────────────────────────┤
-│  Your App/API → Hash Transactions → Batch in Memory           │
-│                                                                 │
-│  TPS: ~4,000,000                                              │
-│  Latency: <1 millisecond                                      │
-│  Cost: $0.000001 per transaction (CPU only)                  │
-│  Handles: Game moves, AI calls, clicks, interactions          │
+│  Input: ~4,000,000 TPS raw transactions                        │
+│  Process: Hash → Build Merkle Tree → Create batch root        │
+│  Output: ~4,000 batches/sec (1000 txs/batch)                  │
+│  Speed: Sub-millisecond (CPU only, no gas)                    │
+│  Cost: $0.000001 per transaction                              │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 **What happens here:**
 1. Your app sends actions to BrixaScaler
 2. Each action is SHA256 hashed (parallel, multi-core)
-3. Actions are batched in memory
-4. A "receipt" is returned immediately (not yet on-chain)
-5. No gas, no wait, no blockchain contact - instant!
+3. Actions are batched in memory (default 1000/batch)
+4. A merkle root is computed for each batch
+5. A "receipt" is returned immediately (not yet on-chain)
+6. No gas, no wait, no blockchain contact - instant!
 
-## Layer 2: Settlement Layer (Blockchain)
+## Layer 2: ZK Layer (Verification)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                   SETTLEMENT LAYER                             │
+│                 LAYER 2: ZK LAYER                              │
 ├─────────────────────────────────────────────────────────────────┤
-│  Batched Hashes → Merkle Tree → ZK Proof → L1/L2             │
-│                                                                 │
-│  TPS: 15-65 (L1: ~15, L2: ~65)                                │
-│  Latency: Minutes                                             │
-│  Cost: $0.01-0.10 per transaction                             │
-│  Handles: Money, assets, final ownership                      │
+│  Input: ~4,000 batch roots/sec                                 │
+│  Process: Generate ZK proof for each merkle root               │
+│  Benchmark: ~17,000-18,000 proofs/sec                         │
+│  Output: ~17,000 ZK proofs/sec                                 │
+│  Cost: CPU only (no gas)                                      │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 **What happens here:**
-1. Every N batches (or time window), settlement triggers
-2. Merkle tree built from batch hashes
-3. ZK circuit generates proof "this batch is valid"
-4. Proof submitted to L1/L2 (Ethereum, Arbitrum, etc.)
-5. Transactions are now FINAL - real blockchain ownership!
+1. Each batch root gets a ZK proof generated
+2. The proof proves "this batch of transactions is valid"
+3. ~17K proofs generated per second
+4. Proofs are bundled (260/tx) for efficient settlement
+
+## Settlement Layer (L1/L2 Blockchain)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│              SETTLEMENT LAYER (L1/L2)                         │
+├─────────────────────────────────────────────────────────────────┤
+│  Input: ~65 aggregated ZK proofs/sec                          │
+│  Process: Submit proof to L1/L2 (Base, Arbitrum, Ethereum)   │
+│  Speed: 15-65 TPS (L1: ~15, L2: ~65)                         │
+│  Latency: Minutes                                            │
+│  Cost: $0.01-0.10 per transaction                            │
+│  Handles: Money, assets, final ownership                     │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**What happens here:**
+1. ~260 ZK proofs are bundled into one settlement tx
+2. Proof submitted to L1/L2 (Ethereum, Arbitrum, Base, etc.)
+3. Transactions are now FINAL - real blockchain ownership!
+
+## Complete Flow
+
+```
+User Action (4M TPS)
+    ↓
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│   BATCHING   │ ──→ │     ZK       │ ──→ │  SETTLEMENT  │
+│    LAYER     │     │    LAYER     │     │    LAYER     │
+│  ~4M TPS     │     │  ~17K TPS    │     │   ~65 TPS    │
+└──────────────┘     └──────────────┘     └──────────────┘
+   (1000 txs)           (ZK proof)        (260 proofs/tx)
+```
+
+## TPS Breakdown
+
+| Stage | Input TPS | Output TPS | Batching |
+|-------|-----------|------------|----------|
+| **Batching** | 4,000,000 | 4,000 | 1000 txs/batch |
+| **ZK** | 4,000 | 17,000 | 1 root = 1 proof |
+| **Settlement** | 17,000 | 65 | 260 proofs/tx |
 
 ## Why Split Layers?
 
-| What | Layer | TPS | Handles |
-|------|-------|-----|---------|
-| **Actions** | Batching | ~4,000,000 | Game moves, AI calls, interactions |
-| **Settlement** | L1/L2 | 15-65 | Money, assets, ownership |
+| Layer | What It Does | TPS | Cost | Handles |
+|-------|--------------|-----|------|---------|
+| **Batching** | Hash + Merkle root | ~4,000,000 | Near-zero | Game moves, AI calls, clicks |
+| **ZK** | Generate cryptographic proof | ~17,000 | CPU only | Prove batch validity |
+| **Settlement** | Submit to blockchain | 15-65 | $0.01-0.10/tx | Money, assets, ownership |
 
 **The key insight:** You don't need blockchain for every action. You only need it when settling. This is like a restaurant - orders come in fast (4M actions), checks are settled later (65 TPS). The player feels instant. The blockchain sees security.
 

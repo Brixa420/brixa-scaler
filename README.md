@@ -44,31 +44,72 @@ The following features are **stubbed out or partially implemented** and need to 
 
 ---
 
-## 🏗️ Layered Architecture: Actions vs Settlement
+## 🏗️ Two-Layer Architecture: Batching → ZK → Settlement
 
-BrixaScaler is designed as a **Layer 3/4** batching infrastructure. Understanding the layers is critical for builders:
+BrixaScaler uses a **two-layer + settlement** architecture to achieve 4M TPS while maintaining blockchain security:
 
-### Layer 1: Batching Layer (Actions)
-- **Throughput:** ~4 million TPS
-- **What it does:** Hashes transactions in parallel, batches them in memory
-- **Speed:** Sub-millisecond latency
-- **Cost:** Near-zero (CPU only, no on-chain gas)
-- **What it handles:** Game moves, AI inferences, social interactions, clicks, etc.
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│ LAYER 1: BATCHING LAYER (High Throughput)                             │
+│ ────────────────────────────────────────                              │
+│ • Input: ~4,000,000 TPS raw transactions                             │
+│ • Process: Hash → Build Merkle Tree → Create batch root               │
+│ • Output: ~4,000 batches/sec (1000 txs/batch)                        │
+│ • Speed: Sub-millisecond (CPU only, no gas)                           │
+└────────────────────────────────────────────────────────────────────────┘
+                                    ↓
+                         ~4K merkle roots/batches/sec
+                                    ↓
+┌─────────────────────────────────────────────────────────────────────────┐
+│ LAYER 2: ZK LAYER (Verification)                                      │
+│ ────────────────────────────────                                       │
+│ • Input: ~4,000 batch roots/sec                                        │
+│ • Process: Generate ZK proof for each merkle root                      │
+│ • Benchmark: ~17,000-18,000 proofs/sec                                │
+│ • Output: ~17,000 ZK proofs/sec                                        │
+└────────────────────────────────────────────────────────────────────────┘
+                                    ↓
+                         Aggregate ~260 proofs per tx
+                                    ↓
+┌─────────────────────────────────────────────────────────────────────────┐
+│ SETTLEMENT LAYER (L1/L2 Blockchain)                                    │
+│ ─────────────────────────────────                                      │
+│ • Input: ~65 aggregated ZK proofs/sec                                   │
+│ • Process: Submit proof to L1/L2 (Base, Arbitrum, Ethereum)            │
+│ • Speed: 15-65 TPS (L1: ~15, L2: ~65)                                  │
+│ • Cost: $0.01-0.10 per transaction                                    │
+└────────────────────────────────────────────────────────────────────────┘
+```
 
-### Layer 2: Settlement Layer (Blockchain)
-- **What it does:** ZK proofs + on-chain settlement
-- **Speed:** 15-65 TPS (L1: ~15 TPS, L2: ~65 TPS)
-- **Cost:** $0.01-0.10 per transaction
-- **What it handles:** Money, assets, final ownership
+### Flow Diagram
+
+```
+User Action (4M TPS)
+    ↓
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│   BATCHING   │ ──→ │     ZK       │ ──→ │  SETTLEMENT  │
+│    LAYER     │     │    LAYER     │     │    LAYER     │
+│  ~4M TPS     │     │  ~17K TPS    │     │   ~65 TPS    │
+└──────────────┘     └──────────────┘     └──────────────┘
+   (1000 txs)           (ZK proof)        (260 proofs/tx)
+```
 
 ### Why Split Layers?
 
-| What | Layer | TPS | Use Case |
-|------|-------|-----|----------|
-| **Actions** | Batching | ~4,000,000 | Game moves, AI calls, interactions |
-| **Settlement** | L1/L2 | 15-65 | Money, assets, ownership |
+| Layer | What It Does | TPS | Cost | Use Case |
+|-------|--------------|-----|------|----------|
+| **Batching** | Hash + Merkle root | ~4,000,000 | Near-zero | Game moves, AI calls, clicks |
+| **ZK** | Generate cryptographic proof | ~17,000 | CPU only | Prove batch validity |
+| **Settlement** | Submit to blockchain | 15-65 | $0.01-0.10/tx | Money, assets, ownership |
 
 **The key insight:** You don't need blockchain for every action. You only need it when settling. This is like a restaurant - orders come in fast (4M actions), checks are settled later (65 TPS). The player feels instant. The blockchain sees security.
+
+### Configuration for TPS Balance
+
+```bash
+MAX_BATCH_SIZE=1000           # txs per batch → 4K batches/sec from 4M TPS
+SETTLEMENT_AGGREGATE_N=260    # ZK proofs bundled per settlement tx (~17k/260 = ~65)
+```
 
 ---
 
