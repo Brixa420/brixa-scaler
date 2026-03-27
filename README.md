@@ -126,33 +126,6 @@ Player/Agent Action
 ```
 
 ---
-## License
-
-
-**Demo Only - Dont Sue Us:** This software is provided as-is for demonstration purposes. No real transactions are processed by default. Use at your own risk.
-
-MIT
-
----
-
-## Security Considerations
-
-This software handles cryptographic operations and blockchain transactions. Security measures include:
-- **DEMO MODE** default to prevent accidental real transactions
-- **Private keys** via environment variables only, never logged
-- **Input validation** on all API endpoints
-- **Rate limiting** to prevent abuse
-- **Transaction simulation** before broadcast
-
-### For Production Use, Additional Measures Recommended:
-- Hardware security module or KMS for key management
-- Independent security audit of ZK circuits
-- Formal verification of critical code paths
-- Bug bounty program
-- HTTPS only
-- Authentication on all endpoints
-
----
 
 ## Environment Variables
 
@@ -199,30 +172,6 @@ This software handles cryptographic operations and blockchain transactions. Secu
 | `KEY_ROTATION_INTERVAL_HOURS` | 168 | Hours between rotations (7 days) |
 | `KEY_ROTATION_WEBHOOK_URL` | - | Alert webhook URL |
 
-### Endpoints
-- `POST /batch` — Submit transaction batch
-- `GET /health` — Server health & stats
-- `GET /benchmark` — Quick TPS benchmark
-- `GET /metrics` — Prometheus metrics
-- `GET /audit` — Audit log
-- `GET /settlement` — Settlement state
-
----
-
-## Architecture
-
-```
-Player/Agent Action
-        ↓
-   [BrixaScaler] ← 4M+ TPS ingestion
-        ↓
-  Batch + Merkle Tree
-        ↓
-  ZK Proof Generation ← 1-5 proofs/second
-        ↓
-   Settlement Chain ← 65 TPS verification
-```
-
 ---
 
 ## Docker
@@ -242,9 +191,6 @@ cp .env.example .env
 # Edit .env with your values
 docker-compose up -d
 ```
-
----
-
 
 ---
 
