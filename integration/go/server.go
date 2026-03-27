@@ -544,6 +544,30 @@ func LoadPrivateKey() (string, error) {
 	return "0x" + key, nil
 }
 
+// ValidatePrivateKey validates private key format
+func ValidatePrivateKey(key string) error {
+	if key == "" {
+		return fmt.Errorf("private key is empty")
+	}
+	
+	// Remove 0x prefix if present
+	if strings.HasPrefix(key, "0x") {
+		key = key[2:]
+	}
+	
+	// Validate hex length (32 bytes = 64 hex chars)
+	if len(key) != 64 {
+		return fmt.Errorf("invalid private key length: %d (expected 64)", len(key))
+	}
+	
+	_, err := hex.DecodeString(key)
+	if err != nil {
+		return fmt.Errorf("invalid private key format: %v", err)
+	}
+	
+	return nil
+}
+
 // ValidateAddress validates Ethereum address format
 func ValidateAddress(addr string) error {
 	if addr == "" {
@@ -1320,3 +1344,292 @@ func HandleSettlement(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(settlementState)
 }
+
+// ═══════════════════════════════════════════════════════════════
+// HARDWARE WALLET SUPPORT
+// ═══════════════════════════════════════════════════════════════
+
+// WalletType represents the type of wallet
+type WalletType string
+
+const (
+	WalletTypeSoftware WalletType = "software"
+	WalletTypeTrezor   WalletType = "trezor"
+	WalletTypeLedger   WalletType = "ledger"
+)
+
+// WalletConfig holds wallet configuration
+type WalletConfig struct {
+	Type         WalletType `env:"WALLET_TYPE"` // "software", "trezor", "ledger"
+	SoftwareKey  string     `env:"SETTLEMENT_PRIVATE_KEY"` // for software wallet
+	HWWalletPath string     `env:"HW_WALLET_PATH"` // e.g., "/dev/hidraw0" or IP:port
+	HWChainID     uint64     `env:"HW_CHAIN_ID"`
+}
+
+// LoadWalletConfig loads wallet configuration
+func LoadWalletConfig() WalletConfig {
+	walletType := WalletType(os.Getenv("WALLET_TYPE"))
+	if walletType == "" {
+		walletType = WalletTypeSoftware
+	}
+	
+	return WalletConfig{
+		Type:         walletType,
+		SoftwareKey:  os.Getenv("SETTLEMENT_PRIVATE_KEY"),
+		HWWalletPath: os.Getenv("HW_WALLET_PATH"),
+		HWChainID:    uint64(getEnvInt("HW_CHAIN_ID", 1)),
+	}
+}
+
+// Signer interface for different wallet types
+type Signer interface {
+	SignTransaction(tx Transaction) (string, error)
+	GetAddress() (string, error)
+}
+
+// SoftwareWallet implements software-based signing
+type SoftwareWallet struct {
+	privateKey string
+	address   string
+}
+
+func NewSoftwareWallet(privateKey string) (*SoftwareWallet, error) {
+	if privateKey == "" {
+		return nil, fmt.Errorf("private key not provided")
+	}
+	
+	// Validate key format
+	if err := ValidatePrivateKey(privateKey); err != nil {
+		return nil, err
+	}
+	
+	// TODO: Derive address from private key
+	// In production, use go-ethereum/crypto
+	
+	return &SoftwareWallet{
+		privateKey: privateKey,
+		address:   "0x" + "derived_address_here",
+	}, nil
+}
+
+func (w *SoftwareWallet) SignTransaction(tx Transaction) (string, error) {
+	// TODO: Implement actual ECDSA signing
+	// In production, use go-ethereum
+	
+	return "0x" + "signed_tx_hash", nil
+}
+
+func (w *SoftwareWallet) GetAddress() (string, error) {
+	return w.address, nil
+}
+
+// HardwareWallet implements hardware wallet signing (Trezor/Ledger)
+type HardwareWallet struct {
+	walletType WalletType
+	devicePath string
+	chainID    uint64
+}
+
+func NewHardwareWallet(wt WalletType, devicePath string, chainID uint64) (*HardwareWallet, error) {
+	if wt != WalletTypeTrezor && wt != WalletTypeLedger {
+		return nil, fmt.Errorf("unsupported wallet type: %s", wt)
+	}
+	
+	return &HardwareWallet{
+		walletType: wt,
+		devicePath: devicePath,
+		chainID:    chainID,
+	}, nil
+}
+
+func (w *HardwareWallet) SignTransaction(tx Transaction) (string, error) {
+	// TODO: Implement hardware wallet signing
+	// - Trezor: use trezor-lib
+	// - Ledger: use ledger-app-eth
+	
+	switch w.walletType {
+	case WalletTypeTrezor:
+		return "", fmt.Errorf("Trezor signing not implemented - use RPC")
+	case WalletTypeLedger:
+		return "", fmt.Errorf("Ledger signing not implemented - use RPC")
+	}
+	
+	return "", fmt.Errorf("unsupported wallet type")
+}
+
+func (w *HardwareWallet) GetAddress() (string, error) {
+	// TODO: Query hardware wallet for address
+	return "", fmt.Errorf("not implemented")
+}
+
+// CreateSigner creates the appropriate signer based on config
+func CreateSigner(cfg WalletConfig) (Signer, error) {
+	switch cfg.Type {
+	case WalletTypeSoftware:
+		return NewSoftwareWallet(cfg.SoftwareKey)
+	case WalletTypeTrezor, WalletTypeLedger:
+		return NewHardwareWallet(cfg.Type, cfg.HWWalletPath, cfg.HWChainID)
+	default:
+		return nil, fmt.Errorf("unknown wallet type: %s", cfg.Type)
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════
+// KEY ROTATION
+// ═══════════════════════════════════════════════════════════════
+
+// KeyRotationConfig holds key rotation settings
+type KeyRotationConfig struct {
+	Enabled         bool   `env:"KEY_ROTATION_ENABLED"`
+	IntervalHours   int    `env:"KEY_ROTATION_INTERVAL_HOURS"`
+	MinKeyVersion   int    `env:"KEY_ROTATION_MIN_KEY_VERSION"`
+	NotifyWebhookURL string `env:"KEY_ROTATION_WEBHOOK_URL"` // Alert when rotation needed
+}
+
+// LoadKeyRotationConfig loads key rotation configuration
+func LoadKeyRotationConfig() KeyRotationConfig {
+	return KeyRotationConfig{
+		Enabled:         os.Getenv("KEY_ROTATION_ENABLED") == "true",
+		IntervalHours:   getEnvInt("KEY_ROTATION_INTERVAL_HOURS", 168), // 7 days default
+		MinKeyVersion:   getEnvInt("KEY_ROTATION_MIN_KEY_VERSION", 1),
+		NotifyWebhookURL: os.Getenv("KEY_ROTATION_WEBHOOK_URL"),
+	}
+}
+
+// KeyRotationManager manages key rotation
+type KeyRotationManager struct {
+	config          KeyRotationConfig
+	currentKey     string
+	currentVersion int
+	keyHistory     []KeyVersion
+	lastRotatedAt  time.Time
+	mu             sync.Mutex
+}
+
+// KeyVersion represents a key version in history
+type KeyVersion struct {
+	Version   int       `json:"version"`
+	KeyHash   string    `json:"key_hash"` // Hash of the key, never the key itself
+	CreatedAt time.Time `json:"created_at"`
+	ExpiresAt time.Time `json:"expires_at"`
+	Active    bool      `json:"active"`
+}
+
+func NewKeyRotationManager(cfg KeyRotationConfig, initialKey string) *KeyRotationManager {
+	krm := &KeyRotationManager{
+		config:         cfg,
+		currentKey:     initialKey,
+		currentVersion: 1,
+		keyHistory:    []KeyVersion{},
+		lastRotatedAt: time.Now(),
+	}
+	
+	// Record initial key version (only hash, not the key)
+	if initialKey != "" {
+		hash := sha256.Sum256([]byte(initialKey))
+		krm.keyHistory = append(krm.keyHistory, KeyVersion{
+			Version:   1,
+			KeyHash:   fmt.Sprintf("%x", hash[:8]),
+			CreatedAt: time.Now(),
+			ExpiresAt: time.Now().Add(time.Duration(cfg.IntervalHours) * time.Hour),
+			Active:    true,
+		})
+	}
+	
+	return krm
+}
+
+// NeedsRotation checks if key rotation is needed
+func (krm *KeyRotationManager) NeedsRotation() bool {
+	if !krm.config.Enabled {
+		return false
+	}
+	
+	elapsed := time.Since(krm.lastRotatedAt)
+	return elapsed >= time.Duration(krm.config.IntervalHours)*time.Hour
+}
+
+// RotateKey rotates to a new key
+func (krm *KeyRotationManager) RotateKey(newKey string) error {
+	krm.mu.Lock()
+	defer krm.mu.Unlock()
+	
+	// Validate new key
+	if err := ValidatePrivateKey(newKey); err != nil {
+		return fmt.Errorf("invalid key format: %v", err)
+	}
+	
+	// Old key becomes inactive
+	if len(krm.keyHistory) > 0 {
+		krm.keyHistory[len(krm.keyHistory)-1].Active = false
+	}
+	
+	// Add new key
+	krm.currentVersion++
+	hash := sha256.Sum256([]byte(newKey))
+	krm.keyHistory = append(krm.keyHistory, KeyVersion{
+		Version:   krm.currentVersion,
+		KeyHash:   fmt.Sprintf("%x", hash[:8]),
+		CreatedAt: time.Now(),
+		ExpiresAt: time.Now().Add(time.Duration(krm.config.IntervalHours) * time.Hour),
+		Active:    true,
+	})
+	
+	krm.currentKey = newKey
+	krm.lastRotatedAt = time.Now()
+	
+	// Notify via webhook if configured
+	if krm.config.NotifyWebhookURL != "" {
+		go func() {
+			// Fire and forget - don't block
+			http.Get(krm.config.NotifyWebhookURL + "?version=" + fmt.Sprintf("%d", krm.currentVersion))
+		}()
+	}
+	
+	logger.Warn("key rotated", map[string]interface{}{
+		"old_version": krm.currentVersion - 1,
+		"new_version": krm.currentVersion,
+	})
+	
+	return nil
+}
+
+// GetCurrentKeyVersion returns current key version
+func (krm *KeyRotationManager) GetCurrentKeyVersion() int {
+	krm.mu.Lock()
+	defer krm.mu.Unlock()
+	return krm.currentVersion
+}
+
+// GetKeyHistory returns key version history
+func (krm *KeyRotationManager) GetKeyHistory() []KeyVersion {
+	krm.mu.Lock()
+	defer krm.mu.Unlock()
+	
+	result := make([]KeyVersion, len(krm.keyHistory))
+	copy(result, krm.keyHistory)
+	return result
+}
+
+// StartKeyRotationMonitor starts background key rotation monitoring
+func StartKeyRotationMonitor(manager *KeyRotationManager) {
+	if !manager.config.Enabled {
+		return
+	}
+	
+	go func() {
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+		
+		for range ticker.C {
+			if manager.NeedsRotation() {
+				logger.Warn("key rotation recommended", map[string]interface{}{
+					"hours_since_rotation": int(time.Since(manager.lastRotatedAt).Hours()),
+				})
+			}
+		}
+	}()
+}
+
+// Global key rotation manager
+var keyRotationManager *KeyRotationManager

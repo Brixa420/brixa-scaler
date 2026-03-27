@@ -281,3 +281,17 @@ This software handles cryptographic operations and blockchain transactions. Secu
 ### Endpoints
 - `GET /audit` - Audit log
 - `GET /settlement` - Settlement state
+
+### Hardware Wallet
+| Variable | Description |
+|----------|-------------|
+| `WALLET_TYPE` | "software" (default), "trezor", "ledger" |
+| `HW_WALLET_PATH` | Device path for hardware wallet |
+| `HW_CHAIN_ID` | Chain ID for hardware wallet |
+
+### Key Rotation
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `KEY_ROTATION_ENABLED` | false | Enable automatic key rotation |
+| `KEY_ROTATION_INTERVAL_HOURS` | 168 | Hours between rotations (7 days) |
+| `KEY_ROTATION_WEBHOOK_URL` | - | Alert webhook URL |
