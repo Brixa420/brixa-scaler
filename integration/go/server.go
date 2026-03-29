@@ -191,7 +191,7 @@ var (
 // MERKLE TREE
 // ═══════════════════════════════════════════════════════════════
 
-func buildMerkleRoot(hashes [][]byte, numShards int) []byte {
+func buildMerkleRoot(hashes [][]byte) []byte {
 	if len(hashes) == 0 {
 		empty := sha256.Sum256([]byte("empty"))
 		return empty[:]
@@ -218,15 +218,44 @@ func buildMerkleRoot(hashes [][]byte, numShards int) []byte {
 
 func ProcessBatch(txs []Transaction, numShards int) (string, int64) {
 	start := time.Now()
-
-	leaves := make([][]byte, len(txs))
-	for i, tx := range txs {
-		data := fmt.Sprintf("%s%s%d%d%s", tx.From, tx.To, tx.Value, tx.Nonce, tx.Data)
-		hash := sha256.Sum256([]byte(data))
-		leaves[i] = hash[:]
+	n := len(txs)
+	
+	if n == 0 {
+		return "", 0
+	}
+	if numShards < 1 {
+		numShards = 1
+	}
+	if numShards > runtime.NumCPU() {
+		numShards = runtime.NumCPU()
 	}
 
-	root := buildMerkleRoot(leaves, numShards)
+	// Parallel transaction hashing
+	var wg sync.WaitGroup
+	leaves := make([][]byte, n)
+	shardSize := (n + numShards - 1) / numShards
+	
+	for s := 0; s < numShards; s++ {
+		wg.Add(1)
+		go func(shardIdx int) {
+			defer wg.Done()
+			start := shardIdx * shardSize
+			end := start + shardSize
+			if end > n {
+				end = n
+			}
+			for i := start; i < end; i++ {
+				tx := txs[i]
+				data := fmt.Sprintf("%s%s%d%d%s", tx.From, tx.To, tx.Value, tx.Nonce, tx.Data)
+				hash := sha256.Sum256([]byte(data))
+				leaves[i] = hash[:]
+			}
+		}(s)
+	}
+	wg.Wait()
+
+	// Build merkle root (single threaded is fine for this part)
+	root := buildMerkleRoot(leaves)
 	elapsed := time.Since(start).Microseconds()
 
 	stats.lock.Lock()
@@ -281,15 +310,26 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleBenchmark(w http.ResponseWriter, r *http.Request) {
-	// Support ?n=N query param, default 1000
+	// Support ?n=N and ?shards=N query params
 	n := 1000
-	if params := r.URL.Query(); params.Get("n") != "" {
+	shards := 4
+	params := r.URL.Query()
+	if params.Get("n") != "" {
 		fmt.Sscanf(params.Get("n"), "%d", &n)
 		if n > 1000000 {
 			n = 1000000 // cap at 1M
 		}
 		if n < 1 {
 			n = 1
+		}
+	}
+	if params.Get("shards") != "" {
+		fmt.Sscanf(params.Get("shards"), "%d", &shards)
+		if shards < 1 {
+			shards = 1
+		}
+		if shards > 64 {
+			shards = 64
 		}
 	}
 
@@ -303,11 +343,11 @@ func handleBenchmark(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	root, elapsed := ProcessBatch(txs, 4)
+	root, elapsed := ProcessBatch(txs, shards)
 	tps := float64(n) * 1000000 / float64(elapsed)
 
 	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, `{"root":"%s","elapsed_us":%d,"tps":%.0f,"transactions":%d}`, root, elapsed, tps, n)
+	fmt.Fprintf(w, `{"root":"%s","elapsed_us":%d,"tps":%.0f,"transactions":%d,"shards":%d}`, root, elapsed, tps, n, shards)
 }
 
 func handleBatch(w http.ResponseWriter, r *http.Request) {
