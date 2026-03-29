@@ -281,21 +281,33 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleBenchmark(w http.ResponseWriter, r *http.Request) {
-	txs := make([]Transaction, 1000)
+	// Support ?n=N query param, default 1000
+	n := 1000
+	if params := r.URL.Query(); params.Get("n") != "" {
+		fmt.Sscanf(params.Get("n"), "%d", &n)
+		if n > 1000000 {
+			n = 1000000 // cap at 1M
+		}
+		if n < 1 {
+			n = 1
+		}
+	}
+
+	txs := make([]Transaction, n)
 	for i := range txs {
 		txs[i] = Transaction{
 			From:  fmt.Sprintf("0x%x", i),
-			To:    fmt.Sprintf("0x%x", 1000-i),
+			To:    fmt.Sprintf("0x%x", n-i),
 			Value: uint64(i),
 			Nonce: uint64(i),
 		}
 	}
 
 	root, elapsed := ProcessBatch(txs, 4)
-	tps := float64(1000) * 1000000 / float64(elapsed)
+	tps := float64(n) * 1000000 / float64(elapsed)
 
 	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, `{"root":"%s","elapsed_us":%d,"tps":%.0f,"transactions":1000}`, root, elapsed, tps)
+	fmt.Fprintf(w, `{"root":"%s","elapsed_us":%d,"tps":%.0f,"transactions":%d}`, root, elapsed, tps, n)
 }
 
 func handleBatch(w http.ResponseWriter, r *http.Request) {
