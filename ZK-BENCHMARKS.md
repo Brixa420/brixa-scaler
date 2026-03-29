@@ -1,47 +1,69 @@
 # Real ZK Benchmarks (gnark)
 
-## What We Measured
+## ⚠️ CRITICAL: Trivial vs Real Circuit
 
-### Single-Proof Performance (Apple M4, CPU)
+**The ~2,000 TPS benchmark was from a TRIVIAL circuit** (just summing values), not real ZK!
 
-| Circuit Size | TPS (proving) |
-|-------------|---------------|
-| 10 inputs   | 1,471         |
-| 50 inputs   | 2,273         |
-| 100 inputs  | 2,128         |
-| 500 inputs  | 1,471         |
+```go
+// TOY CIRCUIT (used in original benchmark) - NOT SECURE
+func (c *BatchCircuit) Define(api frontend.API) error {
+    sum := frontend.Variable(0)
+    for _, h := range c.TxHashes {
+        sum = api.Add(sum, h)  // Just addition - 1 constraint per tx!
+    }
+    return nil
+}
+```
 
-**Average: ~2,000 TPS** on CPU
+This gives ~2,000 TPS but provides **NO cryptographic security**.
 
-### With Recursive Aggregation (66:1 compression)
+## Real MiMC Merkle Circuit Benchmarks (Apple M4, CPU)
 
-| Layer | TPS | Notes |
-|-------|-----|-------|
-| Base (micro) | ~2,000 | Real gnark proofs |
-| After 66x compression | ~132,000 | Effective settlement TPS |
+| Batch Size | Constraints | Prove Time | TPS |
+|------------|-------------|------------|-----|
+| 4 txs | 31,022 | ~100ms | ~300 |
+| 64 txs | 62,702 | ~200ms | ~5 |
+| 128 txs | 125,000+ | ~400ms | ~2.5 |
 
-## The Math
+**Average: ~5-300 TPS** on CPU (real MiMC Merkle circuit)
+
+### Why Real Circuit is Slow
+- MiMC hash per transaction: ~1,900 constraints
+- Merkle tree construction: ~38 additional constraints per level
+- Total: ~1,938 constraints per transaction
+
+## The Honest Math
 
 ```
-2,000 TPS (base proving)
-× 66 (recursive compression)
-= 132,000 effective TPS at settlement
+Real MiMC circuit: ~5 TPS (64 tx batch)
+With period=1000: 5000 txs per proof = 5 TPS (CPU)
+
+GPU prover (estimated): 40x faster = ~200 TPS
+With period=1000: 5000 × 200 = 1,000,000 TPS (theoretical)
 ```
+
+## What We Actually Measured
+
+| Circuit Type | TPS | Security |
+|--------------|-----|----------|
+| Trivial (sum only) | ~2,000 | ❌ None |
+| Real MiMC Merkle | ~5-300 | ✅ Secure |
 
 ## Comparison
 
-| System | TPS | Notes |
-|--------|-----|-------|
-| Our CPU proving | ~2,000 | Real gnark, no GPU |
-| With recursion | ~132,000 | Effective at settlement |
+| System | TPS | Circuit Type |
+|--------|-----|--------------|
+| Our CPU (trivial) | ~2,000 | Sum only (not secure) |
+| Our CPU (real) | ~5-300 | MiMC Merkle |
 | circom/snarkjs | ~2.5 | Verification only |
-| GPU provers | ~100,000+ | Industry standard |
+| GPU provers | ~200-1000 | Real ZK |
 
 ## Conclusion
 
-Real ZK proving on CPU achieves ~2,000 TPS. With recursive aggregation, we get **132,000 effective TPS** at the settlement layer.
+Real ZK proving with MiMC Merkle circuit: **~5-300 TPS** on CPU.
+The 2,000 TPS claim was from a trivial circuit that provides no security.
 
-This is competitive with L2 performance while using only CPU hardware!
+To achieve higher TPS: need GPU prover or switch to different ZK scheme (STARKs).
 
 ## Code
 
@@ -59,8 +81,8 @@ See `zk-gnark/real_benchmark.go` for the benchmark code.
 ### Expected Improvement
 | Hardware | TPS | Cost |
 |----------|-----|------|
-| Apple M4 (CPU) | ~2,000 | $0 (already own) |
-| A100 GPU | ~50,000-100,000 | ~$1/hr (cloud) |
+| Apple M4 (CPU, real circuit) | ~5-300 | $0 (already own) |
+| A100 GPU (real circuit) | ~200-1000 | ~$1/hr (cloud) |
 
 ### Action Items
 - [ ] Set up CUDA-enabled gnark build

@@ -6,17 +6,37 @@
 |-------|------------|--------|--------------|
 | Batching (1 shard) | **~5.4M TPS** | ✅ Real | Go + SHA256 + Merkle |
 | Batching (10 shards) | **~16M TPS** | ✅ Real | Go + parallel workers |
-| ZK Prove (4-tx) | **~3/sec** | ✅ Real | snarkjs Groth16 |
+| ZK Prove (4-tx, trivial) | **~3/sec** | ✅ Real | snarkjs Groth16 |
 | ZK Verify | **~4.5/sec** | ✅ Real | snarkjs Groth16 |
-| ZK (period=1000) | **~12K TPS** | ✅ Calculated | 4000 txs/proof |
+| ZK Prove (real MiMC) | **~5 TPS** | ⚠️ Real gnark | 64-tx batch, 62K constraints |
+
+## ⚠️ Important: Trivial vs Real ZK Circuit
+
+The repo originally benchmarked a **trivial circuit** (just summing values = ~2,000 TPS).
+This is **NOT** representative of real ZK which requires cryptographic hashing.
+
+| Circuit Type | Constraints/Tx | TPS | Security |
+|--------------|----------------|-----|----------|
+| Trivial (sum only) | 1 | ~2,000 | ❌ None |
+| Real MiMC Merkle | ~1,938 | ~5-300 | ✅ Secure |
+
+### Real gnark MiMC Merkle Benchmarks (Apple M4)
+
+| Batch Size | Constraints | Prove Time | TPS |
+|------------|-------------|------------|-----|
+| 4 txs | 31,022 | ~100ms | ~300 |
+| 64 txs | 62,702 | ~200ms | ~5 |
+| 128 txs | 125,000+ | ~400ms | ~2.5 |
+
+**The 12K TPS claim requires:** GPU prover + period=1000 (not achievable on CPU)
 
 ## What's Theoretical/Simulated
 
 | Layer | Claimed | Reality |
 |-------|---------|---------|
 | ZK Proving | 337K TPS | ❌ Was calculated wrong (batchSize/time) |
+| ZK (period=1000) | ~12K TPS | ❌ Needs GPU (CPU only: ~5 TPS) |
 | Settlement | 1 tx/10M txs | ⚠️ Not verified on-chain |
-| ZK (period=1000) | ~12K TPS | ✅ Calculated from real benchmark |
 
 **Note:** The old 337K TPS claim was wrong. Real ZK proving is ~3 proofs/sec for 4-tx batches.
 
