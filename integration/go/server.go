@@ -227,7 +227,7 @@ func ProcessBatch(txs []Transaction, numShards int) (string, int64) {
 	}
 
 	root := buildMerkleRoot(leaves, numShards)
-	elapsed := time.Since(start).Milliseconds()
+	elapsed := time.Since(start).Microseconds()
 
 	stats.lock.Lock()
 	stats.totalBatches++
@@ -292,14 +292,10 @@ func handleBenchmark(w http.ResponseWriter, r *http.Request) {
 	}
 
 	root, elapsed := ProcessBatch(txs, 4)
-	tps := float64(1000) * 1000 / float64(elapsed)
+	tps := float64(1000) * 1000000 / float64(elapsed)
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"root":       root,
-		"elapsed_ms": elapsed,
-		"tps":        tps,
-	})
+	fmt.Fprintf(w, `{"root":"%s","elapsed_us":%d,"tps":%.0f,"transactions":1000}`, root, elapsed, tps)
 }
 
 func handleBatch(w http.ResponseWriter, r *http.Request) {
