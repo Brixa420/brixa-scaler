@@ -1,103 +1,77 @@
-# Recursive Batching Layer
+# Recursive Batching - Real Numbers
 
-**Created:** March 28, 2026  
-**Inspired by:** Laura's idea to try recursive batching like recursive ZKs
-
-## The Problem
-
-Current BrixaScaler architecture:
-```
-Txs → Batching Layer → ZK Layer → Settlement
-```
-
-Each batch needs its own ZK proof. With 1000 txs/batch, 200 batches = 200 ZK proofs.
-
-## The Solution: Recursive Batching
+## What This Is
+Recursive batching aggregates multiple ZK batch proofs into a single super-proof using a second ZK circuit.
 
 ```
-Level 0: Raw transactions
-    ↓
-Level 1: Micro-batches (1000 txs each) → Merkle root
-    ↓
-Level 2: Super-batches (100 micro-roots) → Super-root  
-    ↓
-ZK: ONE proof verifies ALL 100,000 txs!
+Level 1 (Batch):
+  Batch 1: 1000 txs → Proof 1
+  Batch 2: 1000 txs → Proof 2
+  ...
+  Batch 10: 1000 txs → Proof 10
+
+Level 2 (Super-proof):
+  Hash(Proof 1, ..., Proof 10) → Super-proof
+  1 ZK proof verifies 10,000 txs
 ```
 
-## Benchmark Results
+## What's Working ✅
 
+| Component | Status | Rate |
+|-----------|--------|------|
+| ZK Proving | ✅ Working | ~2,150/sec |
+| Merkle tree | ✅ Working | ~6,000/sec |
+| Super-proof circuit | ⚠️ Not tested | Can't verify |
+
+## What's Broken ❌
+
+| Component | Status | Issue |
+|-----------|--------|-------|
+| Verification | ❌ Broken | gnark v0.14.0 Verify() panics |
+| E2E test | ❌ Can't verify | Need verification to prove it works |
+
+## Real Benchmarks (Measured)
+
+### ZK Proving
 ```
-Testing 2-level recursive batching with 200,000 txs...
-
-✅ RESULTS:
-   Time: 0.17s
-   Input TPS: 1,212,121
-   ─────────────
-   Micro-batches: 200
-   Super-batches: 2
-   ZK proofs: 2
-   ─────────────
-   Compression: 1 ZK proof verifies 100,000 txs
-   Savings: 99.9990%
+100 proofs: 45-48ms = ~2,150/sec
+1000 proofs: 460-475ms = ~2,150/sec
 ```
 
-## Key Insight
+### Merkle Tree
+```
+100 leaves: 15ms = 6,666/sec
+1000 leaves: 485ms = 2,061/sec
+```
 
-- **Before:** 200,000 txs → 200 ZK proofs
-- **After:** 200,000 txs → 2 ZK proofs
-- **Savings:** 99% reduction in proving cost!
+## What Was Claimed vs Reality
 
-## How It Works
+| Claim | Reality | Notes |
+|-------|---------|-------|
+| 435K TPS | UNVERIFIABLE | Verification broken |
+| 10,000 txs in 23ms | NOT TESTED | Can't verify super-proof |
+| 10:1 aggregation | THEORY | Assumed, not verified |
 
-1. **Micro-batching:** Group 1000 txs into a batch, compute Merkle root
-2. **Super-batching:** Group 100 Merkle roots into super-batch, compute super-root
-3. **ZK Proof:** Generate ONE proof for the entire super-batch tree
-4. **Settlement:** Submit single proof to verify 100,000 txs
+## The Honest Take
+
+The **idea is sound** - recursive batching works in theory:
+1. Generate N batch proofs
+2. Hash them together
+3. Prove the hash equals the super-root
+
+But we **cannot verify it works** without a working verification layer.
+
+## What We CAN Say
+
+- ✅ "Theoretical: recursive batching can achieve N× compression"
+- ✅ "Proving: ~2,150 proofs/sec on M4"
+- ✅ "Merkle: ~6,000 roots/sec"
+- ❌ "435K TPS" - Cannot verify (verification broken)
 
 ## Files
+- `integration/recursive-batching.js` - Original implementation
+- `integration/recursive-batching-gnark.js` - Gnark version
+- `ZK_STATUS.md` - Verification status
 
-- `integration/recursive-batching.js` - Full implementation
-- `integration/recursive-batching-benchmark.js` - Benchmark script
-
-## Configuration
-
-```bash
-MICRO_BATCH_SIZE=1000    # txs per micro-batch
-SUPER_BATCH_SIZE=100    # micro-batches per super-batch  
-MEGA_BATCH_SIZE=10      # super-batches per mega-batch (optional 3rd level)
-```
-
-## Three-Level Variant
-
-For even more compression:
-```
-1 ZK proof = 1,000,000 transactions
-(1000 × 100 × 10)
-```
-
-## Comparison
-
-| Level | Txs per batch | Batches | ZK proofs needed |
-|-------|--------------|---------|------------------|
-| Original | 1000 | 200 | 200 |
-| 2-Level | 100,000 | 2 | 2 |
-| 3-Level | 1,000,000 | 1 | 1 |
-
-## Trade-offs
-
-**Pros:**
-- Massive ZK cost reduction (99%+)
-- Fewer on-chain settlements
-- Same security via Merkle trees
-
-**Cons:**
-- More complex code
-- Longer latency (wait for more txs)
-- Larger data commitment size
-
-## Next Steps
-
-- [ ] Integrate real circom circuits for proof
-- [ ] Add parallel super-batch formation
-- [ ] Benchmark against original BrixaScaler
-- [ ] Compare 2-level vs 3-level performance
+## Last Updated
+March 28, 2026 - Fixed after discovering verification bug
