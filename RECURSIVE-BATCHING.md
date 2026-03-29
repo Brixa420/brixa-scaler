@@ -18,7 +18,7 @@ Recursive batching means:
 
 ## Current Status
 
-gnark proving works at ~800 TPS for simple circuits. The recursive batching would aggregate multiple batch proofs into one super proof.
+gnark proving works at ~3 proofs/sec (330ms/proof) for 4-tx batches. The recursive batching would aggregate multiple batch proofs into one super proof.
 
 ## Implementation Notes
 

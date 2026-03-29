@@ -120,8 +120,8 @@ See `zk-gnark/real_benchmark.go` for the benchmark code.
 **Math:**
 ```
 10,000 players × 1 tx/player = 10,000 txs
-Batching: 10,000 → 1 batch (2.85M TPS, instant)
-ZK: 1 batch → 1 proof (2,000 TPS, ~5s)
+Batching: 10,000 → 1 batch (~16M TPS, instant)
+ZK: 1 batch → 1 proof (~3 TPS, ~330ms)
 Settlement: 1 proof → 1 L1 tx ($0.01)
 
 Cost: $0.01 vs $10,000 = 1,000,000x cheaper

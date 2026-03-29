@@ -3,7 +3,7 @@
 ## Two Modes
 
 ### ⚡ FAST MODE (Default)
-- **Speed:** ~300K-800K TPS
+- **Speed:** ~16M TPS batching, ~12K TPS with ZK
 - **Privacy:** None (transactions visible)
 - **ZK:** Disabled
 - **Use Case:** High-volume, non-sensitive transactions
