@@ -8,6 +8,7 @@ import (
 	"log"
 	"math/big"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/consensys/gnark-crypto/ecc"
@@ -68,7 +69,7 @@ func hashGo(a, b *big.Int) *big.Int {
 }
 
 func main() {
-	port := "4111"
+	port := os.Getenv("PORT"); if port == "" { port = "4113" }
 	fieldMod = ecc.BN254.ScalarField()
 
 	fmt.Println("╔══════════════════════════════════════════════════════════════╗")
@@ -210,12 +211,8 @@ func main() {
 		// PUBLIC witness only for verification!
 		startVerify := time.Now()
 		
-		// Create public witness - only the public variable (Root)
-		publicCircuit := struct {
-			Root frontend.Variable
-		}{Root: rootVal}
-		
-		publicWt, _ := frontend.NewWitness(&publicCircuit, fieldMod)
+		// Use public witness (only 1 public input)
+		publicWt, _ := frontend.NewWitness(&MerkleCircuit{Root: rootVal}, fieldMod, frontend.PublicOnly())
 		err = groth16.Verify(proof, vk, publicWt)
 		verifyMs := time.Since(startVerify).Milliseconds()
 
