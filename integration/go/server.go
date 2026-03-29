@@ -196,6 +196,20 @@ func buildMerkleRoot(hashes [][]byte) []byte {
 		empty := sha256.Sum256([]byte("empty"))
 		return empty[:]
 	}
+	if len(hashes) == 1 {
+		return hashes[0]
+	}
+	
+	// For small inputs, use single-threaded
+	if len(hashes) < 1024 {
+		return buildMerkleRootSeq(hashes)
+	}
+	
+	// Parallel merkle tree for larger inputs
+	return buildMerkleRootParallel(hashes)
+}
+
+func buildMerkleRootSeq(hashes [][]byte) []byte {
 	for len(hashes) > 1 {
 		next := make([][]byte, 0, (len(hashes)+1)/2)
 		for i := 0; i < len(hashes); i += 2 {
@@ -207,6 +221,48 @@ func buildMerkleRoot(hashes [][]byte) []byte {
 			hash := sha256.Sum256(combined)
 			next = append(next, hash[:])
 		}
+		hashes = next
+	}
+	return hashes[0]
+}
+
+func buildMerkleRootParallel(hashes [][]byte) []byte {
+	numWorkers := runtime.NumCPU()
+	if numWorkers > 8 {
+		numWorkers = 8
+	}
+	
+	for len(hashes) > 1 {
+		nextLen := (len(hashes) + 1) / 2
+		next := make([][]byte, nextLen)
+		
+		var wg sync.WaitGroup
+		// Process in parallel batches
+		batchSize := (nextLen + numWorkers - 1) / numWorkers
+		
+		for batch := 0; batch < numWorkers; batch++ {
+			wg.Add(1)
+			go func(batchIdx int) {
+				defer wg.Done()
+				start := batchIdx * batchSize
+				end := start + batchSize
+				if end > nextLen {
+					end = nextLen
+				}
+				for i := start; i < end; i++ {
+					leftIdx := i * 2
+					rightIdx := leftIdx + 1
+					if rightIdx >= len(hashes) {
+						next[i] = hashes[leftIdx]
+					} else {
+						combined := append(hashes[leftIdx], hashes[rightIdx]...)
+						h := sha256.Sum256(combined)
+						next[i] = h[:]
+					}
+				}
+			}(batch)
+		}
+		wg.Wait()
 		hashes = next
 	}
 	return hashes[0]
