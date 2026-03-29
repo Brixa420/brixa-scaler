@@ -23,12 +23,13 @@ import (
 // ═══════════════════════════════════════════════════════════════
 
 type Config struct {
-	MaxBatchSize    int  `env:"MAX_BATCH_SIZE"`
-	BatchTimeoutMs int  `env:"BATCH_TIMEOUT_MS"`
-	RPCPort         int  `env:"RPC_PORT"`
-	MetricsPort     int  `env:"METRICS_PORT"`
-	MetricsEnabled  bool
-	DemoMode        bool
+	MaxBatchSize    int                 `env:"MAX_BATCH_SIZE"`
+	BatchTimeoutMs int                 `env:"BATCH_TIMEOUT_MS"`
+	RPCPort         int                 `env:"RPC_PORT"`
+	MetricsPort     int                 `env:"METRICS_PORT"`
+	MetricsEnabled  bool                `env:"METRICS_ENABLED"`
+	DemoMode        bool                `env:"DEMO_MODE"`
+	Persistence     PersistenceConfig   `yaml:"persistence"`
 }
 
 type SecurityConfig struct {
@@ -37,18 +38,32 @@ type SecurityConfig struct {
 	RateLimitBurst     int
 	MaxRequestSize     int64
 	MaxGasPriceGwei    uint64
-	CORSOrigins       []string
+	CORSOrigins        []string
 }
 
 func LoadConfig() Config {
 	return Config{
 		MaxBatchSize:    getEnvInt("MAX_BATCH_SIZE", 1000),
-		BatchTimeoutMs: getEnvInt("BATCH_TIMEOUT_MS", 1000),
+		BatchTimeoutMs:  getEnvInt("BATCH_TIMEOUT_MS", 1000),
 		RPCPort:         getEnvInt("RPC_PORT", 8080),
 		MetricsPort:     getEnvInt("METRICS_PORT", 9090),
 		MetricsEnabled:  getEnvBool("METRICS_ENABLED", true),
 		DemoMode:        getEnvBool("DEMO_MODE", true),
+		Persistence:     PersistenceConfig{
+			Enabled:     getEnvBool("PERSISTENCE_ENABLED", true),
+			Backend:     getEnv("PERSISTENCE_BACKEND", "leveldb"),
+			Path:        getEnv("PERSISTENCE_PATH", "./data/state.db"),
+			SyncWrites:  getEnvBool("PERSISTENCE_SYNC_WRITES", false),
+			Compression: getEnvBool("PERSISTENCE_COMPRESSION", true),
+		},
 	}
+}
+
+func getEnv(key, def string) string {
+	if val := os.Getenv(key); val != "" {
+		return val
+	}
+	return def
 }
 
 func LoadSecurityConfig() SecurityConfig {
@@ -140,7 +155,7 @@ type Transaction struct {
 
 type BatchRequest struct {
 	Transactions []Transaction `json:"transactions"`
-	ShardID     int           `json:"shard_id"`
+	ShardID      int           `json:"shard_id"`
 }
 
 type BatchResponse struct {
@@ -150,8 +165,8 @@ type BatchResponse struct {
 }
 
 type Stats struct {
-	totalBatches    uint64
-	totalTxs        uint64
+	totalBatches   uint64
+	totalTxs       uint64
 	pendingBatches uint64
 	pendingProofs  uint64
 	startTime      time.Time
@@ -163,12 +178,13 @@ type Stats struct {
 // ═══════════════════════════════════════════════════════════════
 
 var (
-	logger     Logger
-	stats      = Stats{startTime: time.Now()}
-	config     = LoadConfig()
-	secConfig  = LoadSecurityConfig()
-	rateLimiter = rate.NewLimiter(rate.Limit(secConfig.RateLimitPerSecond), secConfig.RateLimitBurst)
+	logger       Logger
+	stats        = Stats{startTime: time.Now()}
+	config       Config
+	secConfig    SecurityConfig
+	rateLimiter  *rate.Limiter
 	nonceTracker = NewNonceTracker()
+	stateStore   *StateStore
 )
 
 // ═══════════════════════════════════════════════════════════════
@@ -303,7 +319,45 @@ func handleBatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	batchID := fmt.Sprintf("batch_%d", time.Now().UnixNano())
 	root, elapsed := ProcessBatch(req.Transactions, 4)
+
+	// Persist to state store if enabled
+	if stateStore != nil && stateStore.IsEnabled() {
+		// Store each transaction
+		for i, tx := range req.Transactions {
+			// Generate hash from tx data
+			txData := fmt.Sprintf("%s%s%d%s", tx.From, tx.To, tx.Value, tx.Data)
+			txHash := fmt.Sprintf("%x", sha256.Sum256([]byte(txData)))
+			record := &TxRecord{
+				Hash:      txHash,
+				BatchID:   batchID,
+				Position:  uint64(i),
+				Timestamp: time.Now().Unix(),
+				Status:    "batched",
+			}
+			if err := stateStore.PutTx(record); err != nil {
+				logger.Error("failed to store tx", map[string]interface{}{"error": err.Error()})
+			}
+		}
+
+		// Store batch (store empty if no txs)
+		txHashes := make([]string, len(req.Transactions))
+		for i, tx := range req.Transactions {
+			txData := fmt.Sprintf("%s%s%d%s", tx.From, tx.To, tx.Value, tx.Data)
+			txHashes[i] = fmt.Sprintf("%x", sha256.Sum256([]byte(txData)))
+		}
+		batch := &Batch{
+			BatchID:    batchID,
+			TxHashes:   txHashes,
+			MerkleRoot: root,
+			Timestamp:  time.Now().Unix(),
+			Settled:    false,
+		}
+		if err := stateStore.PutBatch(batch); err != nil {
+			logger.Error("failed to store batch", map[string]interface{}{"error": err.Error()})
+		}
+	}
 
 	logger.Info("batch processed", map[string]interface{}{
 		"tx_count":   len(req.Transactions),
@@ -313,7 +367,7 @@ func handleBatch(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(BatchResponse{
 		Root:      root,
-		BatchID:   fmt.Sprintf("batch_%d", time.Now().UnixNano()),
+		BatchID:   batchID,
 		Timestamp: time.Now().Unix(),
 	})
 }
@@ -333,6 +387,69 @@ func handleMetrics(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "# HELP brixascaler_uptime_seconds Server uptime in seconds\n")
 	fmt.Fprintf(w, "# TYPE brixascaler_uptime_seconds gauge\n")
 	fmt.Fprintf(w, "brixascaler_uptime_seconds %d\n", uptime)
+}
+
+// handleStateStats returns state store statistics
+func handleStateStats(w http.ResponseWriter, r *http.Request) {
+	if stateStore == nil || !stateStore.IsEnabled() {
+		json.NewEncoder(w).Encode(map[string]string{"error": "state store not enabled"})
+		return
+	}
+
+	stats, err := stateStore.GetStats()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(stats)
+}
+
+// handleGetBatch retrieves a batch by ID
+func handleGetBatch(w http.ResponseWriter, r *http.Request) {
+	if stateStore == nil || !stateStore.IsEnabled() {
+		json.NewEncoder(w).Encode(map[string]string{"error": "state store not enabled"})
+		return
+	}
+
+	batchID := r.URL.Query().Get("id")
+	if batchID == "" {
+		http.Error(w, "missing batch id", http.StatusBadRequest)
+		return
+	}
+
+	batch, err := stateStore.GetBatch(batchID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(batch)
+}
+
+// handleGetTx retrieves a transaction by hash
+func handleGetTx(w http.ResponseWriter, r *http.Request) {
+	if stateStore == nil || !stateStore.IsEnabled() {
+		json.NewEncoder(w).Encode(map[string]string{"error": "state store not enabled"})
+		return
+	}
+
+	txHash := r.URL.Query().Get("hash")
+	if txHash == "" {
+		http.Error(w, "missing tx hash", http.StatusBadRequest)
+		return
+	}
+
+	tx, err := stateStore.GetTx(txHash)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(tx)
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -383,6 +500,10 @@ func SetupServer() *http.ServeMux {
 	}
 	mux.HandleFunc("/audit", handleAuditLog)
 	mux.HandleFunc("/settlement", HandleSettlement)
+	// State store endpoints
+	mux.HandleFunc("/state/stats", handleStateStats)
+	mux.HandleFunc("/state/batch", handleGetBatch)
+	mux.HandleFunc("/state/tx", handleGetTx)
 	return mux
 }
 
@@ -407,7 +528,8 @@ func secureMiddleware(next http.Handler) http.Handler {
 
 func rateLimitMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !rateLimiter.Allow() {
+		// Bypass rate limiting if RATE_LIMIT_BURST is 0
+		if secConfig.RateLimitBurst > 0 && !rateLimiter.Allow() {
 			http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
 			return
 		}
@@ -472,10 +594,13 @@ func apiKeyMiddleware(apiKey string) func(http.Handler) http.Handler {
 // ═══════════════════════════════════════════════════════════════
 
 func PrintRoutes() {
-	fmt.Println("  GET  /batch    - Submit transaction batch (POST JSON)")
-	fmt.Println("  GET  /health   - Server health & stats")
-	fmt.Println("  GET  /benchmark - Quick TPS benchmark")
-	fmt.Println("  GET  /metrics  - Prometheus metrics")
+	fmt.Println("  GET  /batch       - Submit transaction batch (POST JSON)")
+	fmt.Println("  GET  /health      - Server health & stats")
+	fmt.Println("  GET  /benchmark   - Quick TPS benchmark")
+	fmt.Println("  GET  /metrics     - Prometheus metrics")
+	fmt.Println("  GET  /state/stats - State store statistics")
+	fmt.Println("  GET  /state/batch - Get batch by ID (?id=...)")
+	fmt.Println("  GET  /state/tx    - Get transaction by hash (?hash=...)")
 }
 
 func StartServer(port int) error {
@@ -486,6 +611,24 @@ func StartServer(port int) error {
 
 func RunMain() {
 	logger.Info("brixa-scaler starting", nil)
+
+	// Initialize config (must be done at runtime to read env vars)
+	config = LoadConfig()
+	secConfig = LoadSecurityConfig()
+	rateLimiter = rate.NewLimiter(rate.Limit(secConfig.RateLimitPerSecond), secConfig.RateLimitBurst)
+
+	// Initialize state store
+	var err error
+	stateStore, err = NewStateStore(&config.Persistence)
+	if err != nil {
+		logger.Error("failed to initialize state store", map[string]interface{}{"error": err.Error()})
+	} else {
+		logger.Info("state store initialized", map[string]interface{}{
+			"enabled": stateStore.IsEnabled(),
+			"backend": config.Persistence.Backend,
+			"path":    config.Persistence.Path,
+		})
+	}
 
 	if config.DemoMode {
 		logger.Warn("DEMO_MODE enabled - no real transactions", map[string]interface{}{
@@ -499,6 +642,14 @@ func RunMain() {
 	PrintRoutes()
 	fmt.Printf("🚀 BrixaScaler running on http://localhost:%d\n", config.RPCPort)
 
+	// Start the main HTTP server in a goroutine
+	go func() {
+		logger.Info("starting HTTP server", nil)
+		if err := StartServer(config.RPCPort); err != nil {
+			logger.Error("HTTP server error", map[string]interface{}{"error": err.Error()})
+		}
+	}()
+
 	if config.MetricsEnabled {
 		go func() {
 			logger.Info("metrics server started", nil)
@@ -509,6 +660,14 @@ func RunMain() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	<-sigChan
+
+	// Graceful shutdown
+	logger.Info("shutting down...", nil)
+	if stateStore != nil {
+		if err := stateStore.Close(); err != nil {
+			logger.Error("failed to close state store", map[string]interface{}{"error": err.Error()})
+		}
+	}
 }
 
 func main() {
@@ -525,22 +684,22 @@ func LoadPrivateKey() (string, error) {
 	if key == "" {
 		return "", nil // Not configured - demo mode
 	}
-	
+
 	// Remove 0x prefix if present
 	if strings.HasPrefix(key, "0x") {
 		key = key[2:]
 	}
-	
+
 	// Validate hex length (32 bytes = 64 hex chars)
 	if len(key) != 64 {
 		return "", fmt.Errorf("invalid private key length: %d (expected 64)", len(key))
 	}
-	
+
 	_, err := hex.DecodeString(key)
 	if err != nil {
 		return "", fmt.Errorf("invalid private key format: %v", err)
 	}
-	
+
 	return "0x" + key, nil
 }
 
@@ -549,22 +708,22 @@ func ValidatePrivateKey(key string) error {
 	if key == "" {
 		return fmt.Errorf("private key is empty")
 	}
-	
+
 	// Remove 0x prefix if present
 	if strings.HasPrefix(key, "0x") {
 		key = key[2:]
 	}
-	
+
 	// Validate hex length (32 bytes = 64 hex chars)
 	if len(key) != 64 {
 		return fmt.Errorf("invalid private key length: %d (expected 64)", len(key))
 	}
-	
+
 	_, err := hex.DecodeString(key)
 	if err != nil {
 		return fmt.Errorf("invalid private key format: %v", err)
 	}
-	
+
 	return nil
 }
 
@@ -573,20 +732,20 @@ func ValidateAddress(addr string) error {
 	if addr == "" {
 		return fmt.Errorf("address is empty")
 	}
-	
+
 	if strings.HasPrefix(addr, "0x") {
 		addr = addr[2:]
 	}
-	
+
 	if len(addr) != 40 {
 		return fmt.Errorf("invalid address length: %d (expected 40)", len(addr))
 	}
-	
+
 	_, err := hex.DecodeString(addr)
 	if err != nil {
 		return fmt.Errorf("invalid address format: %v", err)
 	}
-	
+
 	return nil
 }
 
@@ -632,14 +791,14 @@ func CheckGasPrice(gasPrice uint64, maxGwei uint64) error {
 // ═══════════════════════════════════════════════════════════════
 
 type AuditEntry struct {
-	Timestamp   string      `json:"timestamp"`
-	Action      string      `json:"action"`
-	ClientIP    string      `json:"client_ip"`
-	UserAgent   string      `json:"user_agent"`
-	APIKey      string      `json:"api_key_hash"`
-	Success     bool        `json:"success"`
-	Error       string      `json:"error,omitempty"`
-	Details     interface{} `json:"details,omitempty"`
+	Timestamp string      `json:"timestamp"`
+	Action    string      `json:"action"`
+	ClientIP  string      `json:"client_ip"`
+	UserAgent string      `json:"user_agent"`
+	APIKey    string      `json:"api_key_hash"`
+	Success   bool        `json:"success"`
+	Error     string      `json:"error,omitempty"`
+	Details   interface{} `json:"details,omitempty"`
 }
 
 var auditLog []AuditEntry
@@ -648,7 +807,7 @@ var auditLogMu sync.Mutex
 func logAudit(action string, r *http.Request, success bool, err error, details interface{}) {
 	auditLogMu.Lock()
 	defer auditLogMu.Unlock()
-	
+
 	entry := AuditEntry{
 		Timestamp: time.Now().Format(time.RFC3339),
 		Action:    action,
@@ -657,24 +816,24 @@ func logAudit(action string, r *http.Request, success bool, err error, details i
 		Success:   success,
 		Details:   details,
 	}
-	
+
 	if err != nil {
 		entry.Error = err.Error()
 	}
-	
+
 	// Hash API key if present
 	if apiKey := r.Header.Get("X-API-Key"); apiKey != "" {
 		hash := sha256.Sum256([]byte(apiKey))
 		entry.APIKey = fmt.Sprintf("%x", hash[:8])
 	}
-	
+
 	auditLog = append(auditLog, entry)
-	
+
 	// Keep only last 1000 entries
 	if len(auditLog) > 1000 {
 		auditLog = auditLog[len(auditLog)-1000:]
 	}
-	
+
 	logger.Info("audit: "+action, map[string]interface{}{
 		"success": success,
 		"client":  r.RemoteAddr,
@@ -684,7 +843,7 @@ func logAudit(action string, r *http.Request, success bool, err error, details i
 func handleAuditLog(w http.ResponseWriter, r *http.Request) {
 	auditLogMu.Lock()
 	defer auditLogMu.Unlock()
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(auditLog)
 }
@@ -788,7 +947,7 @@ func (cb *CircuitBreaker) RecordFailure() {
 func (cb *CircuitBreaker) IsOpen() bool {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
-	
+
 	if cb.opened {
 		// Check if reset time has passed
 		if time.Since(cb.lastFailure) > cb.resetAfter {
@@ -810,9 +969,9 @@ var settlementBreaker = NewCircuitBreaker(5, 5*time.Minute)
 
 // MaxValues holds maximum values for validation
 type MaxValues struct {
-	MaxValue       uint64 `env:"MAX_TX_VALUE"`
-	MaxDataSize    int    `env:"MAX_TX_DATA_SIZE"`
-	MaxBatchSize   int    `env:"MAX_BATCH_SIZE"`
+	MaxValue     uint64 `env:"MAX_TX_VALUE"`
+	MaxDataSize  int    `env:"MAX_TX_DATA_SIZE"`
+	MaxBatchSize int    `env:"MAX_BATCH_SIZE"`
 }
 
 func LoadMaxValues() MaxValues {
@@ -867,15 +1026,15 @@ func VerifyZKProof(proof ZKProof) error {
 	if len(proof.PublicInputs) == 0 {
 		return fmt.Errorf("no public inputs")
 	}
-	
+
 	// Check proof isn't too old (max 1 hour)
-	if time.Now().Unix() - proof.Timestamp > 3600 {
+	if time.Now().Unix()-proof.Timestamp > 3600 {
 		return fmt.Errorf("proof expired")
 	}
-	
+
 	// TODO: Implement actual groth16/plonk verification
 	// This would use gnark or similar library
-	
+
 	return nil
 }
 
@@ -884,30 +1043,30 @@ func ValidatePublicInputs(publicInputs []string, expectedRoot string, expectedCo
 	if len(publicInputs) < 2 {
 		return fmt.Errorf("insufficient public inputs")
 	}
-	
+
 	// First input should be Merkle root
 	if publicInputs[0] != expectedRoot {
 		return fmt.Errorf("root mismatch: expected %s, got %s", expectedRoot, publicInputs[0])
 	}
-	
+
 	// Second input should be transaction count
 	// (simplified - actual implementation would verify count matches batch)
-	
+
 	return nil
 }
 
 // ProofVerifier holds verification state
 type ProofVerifier struct {
-	timeout    time.Duration
-	metrics    *ProofMetrics
-	mu         sync.Mutex
+	timeout time.Duration
+	metrics *ProofMetrics
+	mu      sync.Mutex
 }
 
 type ProofMetrics struct {
-	Verified   uint64
-	Failed     uint64
-	Expired    uint64
-	AvgTimeUs  uint64
+	Verified  uint64
+	Failed    uint64
+	Expired   uint64
+	AvgTimeUs uint64
 }
 
 func NewProofVerifier(timeout time.Duration) *ProofVerifier {
@@ -919,11 +1078,11 @@ func NewProofVerifier(timeout time.Duration) *ProofVerifier {
 
 func (pv *ProofVerifier) VerifyWithTimeout(proof ZKProof) error {
 	done := make(chan error, 1)
-	
+
 	go func() {
 		done <- VerifyZKProof(proof)
 	}()
-	
+
 	select {
 	case err := <-done:
 		pv.mu.Lock()
@@ -951,11 +1110,11 @@ var proofVerifier = NewProofVerifier(30 * time.Second)
 
 // SettlementConfig holds settlement chain configuration
 type SettlementConfig struct {
-	RPCURL       string
-	PrivateKey   string
-	ChainID      uint64
-	GasLimit     uint64
-	MaxGasPrice  uint64
+	RPCURL      string
+	PrivateKey  string
+	ChainID     uint64
+	GasLimit    uint64
+	MaxGasPrice uint64
 }
 
 // LoadSettlementConfig loads settlement configuration
@@ -971,8 +1130,8 @@ func LoadSettlementConfig() SettlementConfig {
 
 // SimulatedTransaction represents a simulated transaction result
 type SimulatedTransaction struct {
-	Success     bool   `json:"success"`
-	GasUsed     uint64 `json:"gas_used"`
+	Success      bool   `json:"success"`
+	GasUsed      uint64 `json:"gas_used"`
 	RevertReason string `json:"revert_reason,omitempty"`
 }
 
@@ -980,23 +1139,23 @@ type SimulatedTransaction struct {
 // In production, this would call eth_call on the RPC
 func SimulateTransaction(tx Transaction, config SettlementConfig) (SimulatedTransaction, error) {
 	// TODO: Implement actual RPC call to eth_call
-	
+
 	// Placeholder simulation
 	if tx.Value > 0 && tx.To == "0x0000000000000000000000000000000000000000" {
 		return SimulatedTransaction{
-			Success:     false,
+			Success:      false,
 			RevertReason: "cannot send to zero address",
 		}, nil
 	}
-	
+
 	// Basic validation
 	if err := ValidateTransaction(tx); err != nil {
 		return SimulatedTransaction{
-			Success:     false,
+			Success:      false,
 			RevertReason: err.Error(),
 		}, nil
 	}
-	
+
 	return SimulatedTransaction{
 		Success: true,
 		GasUsed: config.GasLimit,
@@ -1024,9 +1183,9 @@ type TransactionMonitor struct {
 func NewTransactionMonitor(rpcURL string) *TransactionMonitor {
 	return &TransactionMonitor{
 		confirmations: make(map[string]*ConfirmationStatus),
-		rpcURL:       rpcURL,
-		timeout:     5 * time.Minute,
-		maxRetries:  3,
+		rpcURL:        rpcURL,
+		timeout:       5 * time.Minute,
+		maxRetries:    3,
 	}
 }
 
@@ -1035,21 +1194,21 @@ func (tm *TransactionMonitor) WaitForConfirmation(txHash string, requiredConfirm
 	if tm.rpcURL == "" {
 		return nil, fmt.Errorf("RPC URL not configured")
 	}
-	
+
 	// TODO: Implement actual eth_getTransactionReceipt polling
 	// This would poll eth_getTransactionReceipt until confirmed
-	
+
 	status := &ConfirmationStatus{
 		TxHash:      txHash,
 		Status:      "confirmed",
 		BlockNumber: 12345678,
 		ConfirmedAt: time.Now(),
 	}
-	
+
 	tm.mu.Lock()
 	tm.confirmations[txHash] = status
 	tm.mu.Unlock()
-	
+
 	return status, nil
 }
 
@@ -1058,15 +1217,15 @@ func BroadcastTransaction(tx Transaction, config SettlementConfig) (string, erro
 	if config.RPCURL == "" || config.PrivateKey == "" {
 		return "", fmt.Errorf("settlement not configured")
 	}
-	
+
 	// Check gas price
 	if config.MaxGasPrice > 0 {
 		// TODO: Get current gas price and verify
 	}
-	
+
 	// Sign and broadcast
 	// TODO: Implement actual signing and broadcast via RPC
-	
+
 	return "0x" + "simulated_hash_" + fmt.Sprintf("%d", time.Now().UnixNano()), nil
 }
 
@@ -1076,10 +1235,10 @@ func BroadcastTransaction(tx Transaction, config SettlementConfig) (string, erro
 
 // MultiSigConfig holds multi-signature configuration
 type MultiSigConfig struct {
-	Enabled           bool     `env:"MULTISIG_ENABLED"`
-	Threshold         int      `env:"MULTISIG_THRESHOLD"` // Required approvals
-	Approvers         []string `env:"MULTISIG_APPROVERS"` // Comma-separated addresses
-	HighValueThreshold uint64  `env:"MULTISIG_HIGH_VALUE_THRESHOLD"` // Value requiring multi-sig
+	Enabled            bool     `env:"MULTISIG_ENABLED"`
+	Threshold          int      `env:"MULTISIG_THRESHOLD"`            // Required approvals
+	Approvers          []string `env:"MULTISIG_APPROVERS"`            // Comma-separated addresses
+	HighValueThreshold uint64   `env:"MULTISIG_HIGH_VALUE_THRESHOLD"` // Value requiring multi-sig
 }
 
 // LoadMultiSigConfig loads multi-sig configuration
@@ -1089,7 +1248,7 @@ func LoadMultiSigConfig() MultiSigConfig {
 	if threshold > len(approvers) {
 		threshold = len(approvers)
 	}
-	
+
 	return MultiSigConfig{
 		Enabled:            os.Getenv("MULTISIG_ENABLED") == "true",
 		Threshold:          threshold,
@@ -1100,15 +1259,15 @@ func LoadMultiSigConfig() MultiSigConfig {
 
 // ApprovalRequest represents a pending approval request
 type ApprovalRequest struct {
-	ID          string    `json:"id"`
-	TxHash      string    `json:"tx_hash"`
-	From        string    `json:"from"`
-	Value       uint64    `json:"value"`
-	Approvers   []string  `json:"approvers"`
-	ApprovedBy  []string  `json:"approved_by"`
-	Status      string    `json:"status"` // "pending", "approved", "rejected"
-	CreatedAt   time.Time `json:"created_at"`
-	ExpiresAt   time.Time `json:"expires_at"`
+	ID         string    `json:"id"`
+	TxHash     string    `json:"tx_hash"`
+	From       string    `json:"from"`
+	Value      uint64    `json:"value"`
+	Approvers  []string  `json:"approvers"`
+	ApprovedBy []string  `json:"approved_by"`
+	Status     string    `json:"status"` // "pending", "approved", "rejected"
+	CreatedAt  time.Time `json:"created_at"`
+	ExpiresAt  time.Time `json:"expires_at"`
 }
 
 // MultiSigManager manages multi-sig approvals
@@ -1138,23 +1297,23 @@ func (m *MultiSigManager) RequestApproval(txHash string, from string, value uint
 	if !m.RequiresMultiSig(value) {
 		return nil, nil // No multi-sig needed
 	}
-	
+
 	req := &ApprovalRequest{
-		ID:          fmt.Sprintf("approval_%d", time.Now().UnixNano()),
-		TxHash:      txHash,
-		From:        from,
-		Value:       value,
-		Approvers:   m.config.Approvers,
-		ApprovedBy:  []string{},
-		Status:      "pending",
-		CreatedAt:   time.Now(),
-		ExpiresAt:   time.Now().Add(1 * time.Hour),
+		ID:         fmt.Sprintf("approval_%d", time.Now().UnixNano()),
+		TxHash:     txHash,
+		From:       from,
+		Value:      value,
+		Approvers:  m.config.Approvers,
+		ApprovedBy: []string{},
+		Status:     "pending",
+		CreatedAt:  time.Now(),
+		ExpiresAt:  time.Now().Add(1 * time.Hour),
 	}
-	
+
 	m.mu.Lock()
 	m.pendingApprovals[req.ID] = req
 	m.mu.Unlock()
-	
+
 	return req, nil
 }
 
@@ -1162,16 +1321,16 @@ func (m *MultiSigManager) RequestApproval(txHash string, from string, value uint
 func (m *MultiSigManager) Approve(requestID string, approver string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	req, ok := m.pendingApprovals[requestID]
 	if !ok {
 		return fmt.Errorf("approval request not found")
 	}
-	
+
 	if time.Now().After(req.ExpiresAt) {
 		return fmt.Errorf("approval request expired")
 	}
-	
+
 	// Check if approver is valid
 	validApprover := false
 	for _, a := range m.config.Approvers {
@@ -1183,21 +1342,21 @@ func (m *MultiSigManager) Approve(requestID string, approver string) error {
 	if !validApprover {
 		return fmt.Errorf("invalid approver")
 	}
-	
+
 	// Check if already approved
 	for _, a := range req.ApprovedBy {
 		if strings.ToLower(a) == strings.ToLower(approver) {
 			return fmt.Errorf("already approved")
 		}
 	}
-	
+
 	req.ApprovedBy = append(req.ApprovedBy, approver)
-	
+
 	// Check if threshold reached
 	if len(req.ApprovedBy) >= m.config.Threshold {
 		req.Status = "approved"
 	}
-	
+
 	return nil
 }
 
@@ -1205,12 +1364,12 @@ func (m *MultiSigManager) Approve(requestID string, approver string) error {
 func (m *MultiSigManager) IsApproved(requestID string) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	req, ok := m.pendingApprovals[requestID]
 	if !ok {
 		return false
 	}
-	
+
 	return req.Status == "approved"
 }
 
@@ -1223,11 +1382,11 @@ var multiSigManager *MultiSigManager
 
 // SettlementState holds the current settlement state
 type SettlementState struct {
-	PendingSettlements uint64    `json:"pending_settlements"`
-	ConfirmedSettlements uint64  `json:"confirmed_settlements"`
-	FailedSettlements   uint64   `json:"failed_settlements"`
-	LastSettlementTime time.Time `json:"last_settlement_time"`
-	mu                 sync.Mutex
+	PendingSettlements   uint64    `json:"pending_settlements"`
+	ConfirmedSettlements uint64    `json:"confirmed_settlements"`
+	FailedSettlements    uint64    `json:"failed_settlements"`
+	LastSettlementTime   time.Time `json:"last_settlement_time"`
+	mu                   sync.Mutex
 }
 
 var settlementState = SettlementState{}
@@ -1235,12 +1394,12 @@ var settlementState = SettlementState{}
 // ProcessSettlement processes a batch for settlement
 func ProcessSettlement(batch BatchResponse, txs []Transaction) (string, error) {
 	cfg := LoadSettlementConfig()
-	
+
 	// Check circuit breaker
 	if settlementBreaker.IsOpen() {
 		return "", fmt.Errorf("settlement circuit breaker open - too many failures")
 	}
-	
+
 	// Check if demo mode
 	if config.DemoMode || cfg.PrivateKey == "" {
 		logger.Info("demo mode: skipping settlement", map[string]interface{}{
@@ -1248,33 +1407,33 @@ func ProcessSettlement(batch BatchResponse, txs []Transaction) (string, error) {
 		})
 		return "", nil
 	}
-	
+
 	// Validate all transactions
 	for _, tx := range txs {
 		if err := ValidateTransaction(tx); err != nil {
 			settlementBreaker.RecordFailure()
 			return "", fmt.Errorf("transaction validation failed: %v", err)
 		}
-		
+
 		// Check value limits
 		if err := CheckTransactionValue(tx.Value, getEnvUint64("MAX_TX_VALUE", 1_000_000_000_000_000_000)); err != nil {
 			settlementBreaker.RecordFailure()
 			return "", err
 		}
-		
+
 		// Check data size
 		if err := CheckTransactionDataSize(tx.Data, getEnvInt("MAX_TX_DATA_SIZE", 1024)); err != nil {
 			settlementBreaker.RecordFailure()
 			return "", err
 		}
 	}
-	
+
 	// Check if multi-sig required
 	totalValue := uint64(0)
 	for _, tx := range txs {
 		totalValue += tx.Value
 	}
-	
+
 	if multiSigManager != nil && multiSigManager.RequiresMultiSig(totalValue) {
 		req, err := multiSigManager.RequestApproval(batch.BatchID, "", totalValue)
 		if err != nil {
@@ -1284,7 +1443,7 @@ func ProcessSettlement(batch BatchResponse, txs []Transaction) (string, error) {
 			return "", fmt.Errorf("high-value transaction requires multi-sig approval: %s", req.ID)
 		}
 	}
-	
+
 	// Simulate transaction before broadcast
 	for _, tx := range txs {
 		result, err := SimulateTransaction(tx, cfg)
@@ -1295,7 +1454,7 @@ func ProcessSettlement(batch BatchResponse, txs []Transaction) (string, error) {
 			return "", fmt.Errorf("simulation failed: %s", result.RevertReason)
 		}
 	}
-	
+
 	// Broadcast
 	txHash, err := BroadcastTransaction(txs[0], cfg)
 	if err != nil {
@@ -1305,12 +1464,12 @@ func ProcessSettlement(batch BatchResponse, txs []Transaction) (string, error) {
 		settlementState.mu.Unlock()
 		return "", err
 	}
-	
+
 	settlementBreaker.RecordSuccess()
 	settlementState.mu.Lock()
 	settlementState.PendingSettlements++
 	settlementState.mu.Unlock()
-	
+
 	// Start confirmation monitoring
 	go func() {
 		monitor := NewTransactionMonitor(cfg.RPCURL)
@@ -1332,7 +1491,7 @@ func ProcessSettlement(batch BatchResponse, txs []Transaction) (string, error) {
 			settlementState.mu.Unlock()
 		}
 	}()
-	
+
 	return txHash, nil
 }
 
@@ -1340,7 +1499,7 @@ func ProcessSettlement(batch BatchResponse, txs []Transaction) (string, error) {
 func HandleSettlement(w http.ResponseWriter, r *http.Request) {
 	settlementState.mu.Lock()
 	defer settlementState.mu.Unlock()
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(settlementState)
 }
@@ -1360,10 +1519,10 @@ const (
 
 // WalletConfig holds wallet configuration
 type WalletConfig struct {
-	Type         WalletType `env:"WALLET_TYPE"` // "software", "trezor", "ledger"
+	Type         WalletType `env:"WALLET_TYPE"`            // "software", "trezor", "ledger"
 	SoftwareKey  string     `env:"SETTLEMENT_PRIVATE_KEY"` // for software wallet
-	HWWalletPath string     `env:"HW_WALLET_PATH"` // e.g., "/dev/hidraw0" or IP:port
-	HWChainID     uint64     `env:"HW_CHAIN_ID"`
+	HWWalletPath string     `env:"HW_WALLET_PATH"`         // e.g., "/dev/hidraw0" or IP:port
+	HWChainID    uint64     `env:"HW_CHAIN_ID"`
 }
 
 // LoadWalletConfig loads wallet configuration
@@ -1372,7 +1531,7 @@ func LoadWalletConfig() WalletConfig {
 	if walletType == "" {
 		walletType = WalletTypeSoftware
 	}
-	
+
 	return WalletConfig{
 		Type:         walletType,
 		SoftwareKey:  os.Getenv("SETTLEMENT_PRIVATE_KEY"),
@@ -1390,32 +1549,32 @@ type Signer interface {
 // SoftwareWallet implements software-based signing
 type SoftwareWallet struct {
 	privateKey string
-	address   string
+	address    string
 }
 
 func NewSoftwareWallet(privateKey string) (*SoftwareWallet, error) {
 	if privateKey == "" {
 		return nil, fmt.Errorf("private key not provided")
 	}
-	
+
 	// Validate key format
 	if err := ValidatePrivateKey(privateKey); err != nil {
 		return nil, err
 	}
-	
+
 	// TODO: Derive address from private key
 	// In production, use go-ethereum/crypto
-	
+
 	return &SoftwareWallet{
 		privateKey: privateKey,
-		address:   "0x" + "derived_address_here",
+		address:    "0x" + "derived_address_here",
 	}, nil
 }
 
 func (w *SoftwareWallet) SignTransaction(tx Transaction) (string, error) {
 	// TODO: Implement actual ECDSA signing
 	// In production, use go-ethereum
-	
+
 	return "0x" + "signed_tx_hash", nil
 }
 
@@ -1434,7 +1593,7 @@ func NewHardwareWallet(wt WalletType, devicePath string, chainID uint64) (*Hardw
 	if wt != WalletTypeTrezor && wt != WalletTypeLedger {
 		return nil, fmt.Errorf("unsupported wallet type: %s", wt)
 	}
-	
+
 	return &HardwareWallet{
 		walletType: wt,
 		devicePath: devicePath,
@@ -1446,14 +1605,14 @@ func (w *HardwareWallet) SignTransaction(tx Transaction) (string, error) {
 	// TODO: Implement hardware wallet signing
 	// - Trezor: use trezor-lib
 	// - Ledger: use ledger-app-eth
-	
+
 	switch w.walletType {
 	case WalletTypeTrezor:
 		return "", fmt.Errorf("Trezor signing not implemented - use RPC")
 	case WalletTypeLedger:
 		return "", fmt.Errorf("Ledger signing not implemented - use RPC")
 	}
-	
+
 	return "", fmt.Errorf("unsupported wallet type")
 }
 
@@ -1480,25 +1639,25 @@ func CreateSigner(cfg WalletConfig) (Signer, error) {
 
 // KeyRotationConfig holds key rotation settings
 type KeyRotationConfig struct {
-	Enabled         bool   `env:"KEY_ROTATION_ENABLED"`
-	IntervalHours   int    `env:"KEY_ROTATION_INTERVAL_HOURS"`
-	MinKeyVersion   int    `env:"KEY_ROTATION_MIN_KEY_VERSION"`
+	Enabled          bool   `env:"KEY_ROTATION_ENABLED"`
+	IntervalHours    int    `env:"KEY_ROTATION_INTERVAL_HOURS"`
+	MinKeyVersion    int    `env:"KEY_ROTATION_MIN_KEY_VERSION"`
 	NotifyWebhookURL string `env:"KEY_ROTATION_WEBHOOK_URL"` // Alert when rotation needed
 }
 
 // LoadKeyRotationConfig loads key rotation configuration
 func LoadKeyRotationConfig() KeyRotationConfig {
 	return KeyRotationConfig{
-		Enabled:         os.Getenv("KEY_ROTATION_ENABLED") == "true",
-		IntervalHours:   getEnvInt("KEY_ROTATION_INTERVAL_HOURS", 168), // 7 days default
-		MinKeyVersion:   getEnvInt("KEY_ROTATION_MIN_KEY_VERSION", 1),
+		Enabled:          os.Getenv("KEY_ROTATION_ENABLED") == "true",
+		IntervalHours:    getEnvInt("KEY_ROTATION_INTERVAL_HOURS", 168), // 7 days default
+		MinKeyVersion:    getEnvInt("KEY_ROTATION_MIN_KEY_VERSION", 1),
 		NotifyWebhookURL: os.Getenv("KEY_ROTATION_WEBHOOK_URL"),
 	}
 }
 
 // KeyRotationManager manages key rotation
 type KeyRotationManager struct {
-	config          KeyRotationConfig
+	config         KeyRotationConfig
 	currentKey     string
 	currentVersion int
 	keyHistory     []KeyVersion
@@ -1520,10 +1679,10 @@ func NewKeyRotationManager(cfg KeyRotationConfig, initialKey string) *KeyRotatio
 		config:         cfg,
 		currentKey:     initialKey,
 		currentVersion: 1,
-		keyHistory:    []KeyVersion{},
-		lastRotatedAt: time.Now(),
+		keyHistory:     []KeyVersion{},
+		lastRotatedAt:  time.Now(),
 	}
-	
+
 	// Record initial key version (only hash, not the key)
 	if initialKey != "" {
 		hash := sha256.Sum256([]byte(initialKey))
@@ -1535,7 +1694,7 @@ func NewKeyRotationManager(cfg KeyRotationConfig, initialKey string) *KeyRotatio
 			Active:    true,
 		})
 	}
-	
+
 	return krm
 }
 
@@ -1544,7 +1703,7 @@ func (krm *KeyRotationManager) NeedsRotation() bool {
 	if !krm.config.Enabled {
 		return false
 	}
-	
+
 	elapsed := time.Since(krm.lastRotatedAt)
 	return elapsed >= time.Duration(krm.config.IntervalHours)*time.Hour
 }
@@ -1553,17 +1712,17 @@ func (krm *KeyRotationManager) NeedsRotation() bool {
 func (krm *KeyRotationManager) RotateKey(newKey string) error {
 	krm.mu.Lock()
 	defer krm.mu.Unlock()
-	
+
 	// Validate new key
 	if err := ValidatePrivateKey(newKey); err != nil {
 		return fmt.Errorf("invalid key format: %v", err)
 	}
-	
+
 	// Old key becomes inactive
 	if len(krm.keyHistory) > 0 {
 		krm.keyHistory[len(krm.keyHistory)-1].Active = false
 	}
-	
+
 	// Add new key
 	krm.currentVersion++
 	hash := sha256.Sum256([]byte(newKey))
@@ -1574,10 +1733,10 @@ func (krm *KeyRotationManager) RotateKey(newKey string) error {
 		ExpiresAt: time.Now().Add(time.Duration(krm.config.IntervalHours) * time.Hour),
 		Active:    true,
 	})
-	
+
 	krm.currentKey = newKey
 	krm.lastRotatedAt = time.Now()
-	
+
 	// Notify via webhook if configured
 	if krm.config.NotifyWebhookURL != "" {
 		go func() {
@@ -1585,12 +1744,12 @@ func (krm *KeyRotationManager) RotateKey(newKey string) error {
 			http.Get(krm.config.NotifyWebhookURL + "?version=" + fmt.Sprintf("%d", krm.currentVersion))
 		}()
 	}
-	
+
 	logger.Warn("key rotated", map[string]interface{}{
 		"old_version": krm.currentVersion - 1,
 		"new_version": krm.currentVersion,
 	})
-	
+
 	return nil
 }
 
@@ -1605,7 +1764,7 @@ func (krm *KeyRotationManager) GetCurrentKeyVersion() int {
 func (krm *KeyRotationManager) GetKeyHistory() []KeyVersion {
 	krm.mu.Lock()
 	defer krm.mu.Unlock()
-	
+
 	result := make([]KeyVersion, len(krm.keyHistory))
 	copy(result, krm.keyHistory)
 	return result
@@ -1616,11 +1775,11 @@ func StartKeyRotationMonitor(manager *KeyRotationManager) {
 	if !manager.config.Enabled {
 		return
 	}
-	
+
 	go func() {
 		ticker := time.NewTicker(1 * time.Hour)
 		defer ticker.Stop()
-		
+
 		for range ticker.C {
 			if manager.NeedsRotation() {
 				logger.Warn("key rotation recommended", map[string]interface{}{
